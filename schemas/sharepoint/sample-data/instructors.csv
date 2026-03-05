@@ -1,0 +1,13 @@
+InstructorEDIPI,LastName,FirstName,Rank,Role,CompanyAssigned,PlatoonAssigned,ClassNumber,DateAssigned,PRD,StudentsAssigned,EventsThisWeek,EventsThisMonth,CounselingsOverdue,Status,Phone,Email,Notes
+2181241943,Tran,Michael,Capt,Company Commander,Alpha,N/A,1-26,2025-06-15,2027-06-15,0,3,10,0,Active,703-784-2679,m.tran@usmc.mil,
+7831113321,Thompson,Blake,1stLt,Company XO,Alpha,N/A,1-26,2025-09-01,2027-03-01,0,2,8,0,Active,703-784-2535,b.thompson@usmc.mil,
+9703905715,Bishop,Dylan,Capt,Staff Platoon Commander,Alpha,1st,1-26,2025-03-01,2027-03-01,50,3,19,3,Active,703-784-4611,d.bishop@usmc.mil,
+7110082321,Johnson,Stephen,Capt,Staff Platoon Commander,Alpha,2nd,1-26,2025-05-01,2027-05-01,50,4,10,1,Active,703-784-6514,s.johnson@usmc.mil,
+9776552803,Harris,Dennis,Capt,Staff Platoon Commander,Alpha,3rd,1-26,2025-07-01,2027-07-01,50,5,16,0,Active,703-784-7201,d.harris@usmc.mil,
+8995970241,Lamb,Justin,Capt,Staff Platoon Commander,Alpha,4th,1-26,2025-09-01,2027-09-01,50,6,11,0,Active,703-784-1750,j.lamb@usmc.mil,
+4673561638,Lee,Justin,1stLt,Assistant SPC,Alpha,1st,1-26,2025-08-22,2027-08-01,0,2,14,0,Active,703-784-5554,j.lee@usmc.mil,
+6884882440,Adams,Patrick,1stLt,Assistant SPC,Alpha,3rd,1-26,2025-08-15,2027-08-01,0,3,18,0,Active,703-784-5374,p.adams@usmc.mil,
+4131575764,Watkins,Kevin,GySgt,Tactics Instructor,Alpha,N/A,1-26,2024-11-22,2026-04-01,0,3,15,0,Active,703-784-7216,k.watkins@usmc.mil,
+4332894265,Roth,Samuel,SSgt,Tactics Instructor,Alpha,N/A,1-26,2024-08-21,2026-05-20,0,3,8,0,Active,703-784-6168,s.roth@usmc.mil,
+8378385615,Diaz,Thomas,SSgt,Weapons Instructor,Alpha,N/A,1-26,2025-02-10,2027-02-10,0,3,18,0,Active,703-784-9179,t.diaz@usmc.mil,
+5908596099,Meyer,Bryce,SSgt,PT Instructor,Alpha,N/A,1-26,2024-05-15,2026-04-15,0,3,11,0,Active,703-784-9830,b.meyer@usmc.mil,
