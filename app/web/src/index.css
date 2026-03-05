@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy: #1a365d;
+  --color-navy-light: #2a4a7f;
+  --color-navy-dark: #0f2440;
+  --color-scarlet: #CC0000;
+  --color-gold: #FFD700;
+  --color-sidebar: #0f172a;
+  --color-sidebar-hover: #1e293b;
+  --color-sidebar-active: #334155;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f8fafc;
+  color: #1e293b;
+}
+
+/* Custom scrollbar for chat */
+.chat-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.chat-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+/* Markdown in chat messages */
+.chat-markdown h1,
+.chat-markdown h2,
+.chat-markdown h3 {
+  font-weight: 700;
+  margin-top: 0.75em;
+  margin-bottom: 0.25em;
+}
+.chat-markdown h1 { font-size: 1.25rem; }
+.chat-markdown h2 { font-size: 1.1rem; }
+.chat-markdown h3 { font-size: 1rem; }
+.chat-markdown p { margin: 0.5em 0; }
+.chat-markdown ul, .chat-markdown ol { margin: 0.5em 0; padding-left: 1.5em; }
+.chat-markdown li { margin: 0.25em 0; }
+.chat-markdown strong { font-weight: 700; }
+.chat-markdown code { background: #f1f5f9; padding: 0.125em 0.375em; border-radius: 0.25rem; font-size: 0.875em; }
+.chat-markdown hr { border: none; border-top: 1px solid #e2e8f0; margin: 1em 0; }
+.chat-markdown em { font-style: italic; color: #64748b; }
+.chat-markdown table { border-collapse: collapse; margin: 0.5em 0; width: 100%; }
+.chat-markdown th, .chat-markdown td { border: 1px solid #e2e8f0; padding: 0.375em 0.75em; text-align: left; }
+.chat-markdown th { background: #f8fafc; font-weight: 600; }
