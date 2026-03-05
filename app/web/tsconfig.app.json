@@ -19,8 +19,10 @@
     /* Paths */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@data/*": ["../data/*"]
     },
+    "resolveJsonModule": true,
 
     /* Linting */
     "strict": true,

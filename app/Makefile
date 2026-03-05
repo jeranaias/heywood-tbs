@@ -33,5 +33,14 @@ serve: build
 convert-data:
 	python scripts/csv-to-json.py
 
+# Static build for GitHub Pages (no backend needed)
+build-static:
+	cd web && npm ci && npm run build:static
+	cp web/dist/index.html web/dist/404.html
+
+# Preview static build locally
+preview-static: build-static
+	cd web && npx vite preview --mode static --port 4173
+
 clean:
 	rm -rf bin/ web/dist/ web/node_modules/
