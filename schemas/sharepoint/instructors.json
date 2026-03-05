@@ -1,0 +1,163 @@
+{
+  "listName": "Instructors",
+  "description": "Heywood Phase 1 — TBS instructor roster with company assignments and workload tracking. PII: Yes (names, EDIPIs). Links to QualificationRecords and TrainingSchedule.",
+  "columns": [
+    {
+      "name": "InstructorEDIPI",
+      "type": "Text",
+      "required": true,
+      "description": "10-digit EDIPI — primary instructor identifier. PII.",
+      "maxLength": 10,
+      "indexed": true
+    },
+    {
+      "name": "LastName",
+      "type": "Text",
+      "required": true,
+      "description": "PII.",
+      "maxLength": 50
+    },
+    {
+      "name": "FirstName",
+      "type": "Text",
+      "required": true,
+      "description": "PII.",
+      "maxLength": 50
+    },
+    {
+      "name": "Rank",
+      "type": "Choice",
+      "required": true,
+      "choices": ["Capt", "1stLt", "CWO5", "CWO4", "CWO3", "CWO2", "MGySgt", "MSgt", "GySgt", "SSgt"]
+    },
+    {
+      "name": "Role",
+      "type": "Choice",
+      "required": true,
+      "choices": ["Staff Platoon Commander", "Assistant SPC", "Academic Instructor", "Tactics Instructor", "Weapons Instructor", "Land Nav Instructor", "PT Instructor", "Company Commander", "Company XO"],
+      "indexed": true
+    },
+    {
+      "name": "CompanyAssigned",
+      "type": "Choice",
+      "required": true,
+      "choices": ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "India", "Mike", "HQ"],
+      "indexed": true
+    },
+    {
+      "name": "PlatoonAssigned",
+      "type": "Choice",
+      "required": false,
+      "choices": ["1st", "2nd", "3rd", "4th", "N/A"],
+      "description": "SPCs and ASPCs are assigned to specific platoons"
+    },
+    {
+      "name": "ClassNumber",
+      "type": "Text",
+      "required": true,
+      "description": "Current class assignment",
+      "indexed": true
+    },
+    {
+      "name": "DateAssigned",
+      "type": "DateTime",
+      "required": true,
+      "dateOnly": true,
+      "description": "Date instructor was assigned to current billet"
+    },
+    {
+      "name": "PRD",
+      "type": "DateTime",
+      "required": false,
+      "dateOnly": true,
+      "description": "Projected Rotation Date — when instructor PCSes or rotates"
+    },
+    {
+      "name": "StudentsAssigned",
+      "type": "Number",
+      "required": false,
+      "min": 0,
+      "max": 60,
+      "description": "Number of students this instructor directly evaluates"
+    },
+    {
+      "name": "EventsThisWeek",
+      "type": "Number",
+      "required": false,
+      "min": 0,
+      "description": "Auto-calculated from TrainingSchedule — current week event count"
+    },
+    {
+      "name": "EventsThisMonth",
+      "type": "Number",
+      "required": false,
+      "min": 0,
+      "description": "Auto-calculated from TrainingSchedule — current month event count"
+    },
+    {
+      "name": "CounselingsOverdue",
+      "type": "Number",
+      "required": false,
+      "min": 0,
+      "description": "Count of students with overdue counseling sessions"
+    },
+    {
+      "name": "Status",
+      "type": "Choice",
+      "required": true,
+      "choices": ["Active", "Leave/Liberty", "TAD", "Medical", "PCS Pending", "Departed"],
+      "default": "Active"
+    },
+    {
+      "name": "Phone",
+      "type": "Text",
+      "required": false,
+      "maxLength": 20,
+      "description": "Duty phone or cell. PII."
+    },
+    {
+      "name": "Email",
+      "type": "Text",
+      "required": false,
+      "maxLength": 100,
+      "description": "USMC email address"
+    },
+    {
+      "name": "Notes",
+      "type": "MultilineText",
+      "required": false
+    }
+  ],
+  "views": [
+    {
+      "name": "Company Roster",
+      "description": "All instructors in a company, sorted by role then rank",
+      "columns": ["Rank", "LastName", "FirstName", "Role", "PlatoonAssigned", "StudentsAssigned", "Status"],
+      "filter": "Status != Departed",
+      "sort": "Role ASC, Rank DESC",
+      "groupBy": "CompanyAssigned",
+      "access": "Staff (all companies), SPC (own company)"
+    },
+    {
+      "name": "Workload Overview",
+      "description": "Instructor workload for equitable distribution",
+      "columns": ["LastName", "CompanyAssigned", "Role", "StudentsAssigned", "EventsThisWeek", "EventsThisMonth", "CounselingsOverdue"],
+      "filter": "Status = Active",
+      "sort": "EventsThisMonth DESC",
+      "access": "Staff only"
+    },
+    {
+      "name": "Rotation Tracker",
+      "description": "Instructors approaching PRD for replacement planning",
+      "columns": ["Rank", "LastName", "CompanyAssigned", "Role", "PRD", "Status"],
+      "filter": "PRD <= [Today+180days] AND Status != Departed",
+      "sort": "PRD ASC",
+      "access": "Staff only"
+    }
+  ],
+  "rowLevelSecurity": {
+    "Staff": "All rows",
+    "SPC": "CompanyAssigned = SPC's company",
+    "Student": "No access to instructor list"
+  }
+}

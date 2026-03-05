@@ -1,0 +1,194 @@
+{
+  "listName": "EventFeedback",
+  "description": "Heywood Phase 1 — Structured post-event feedback from students and instructors. Supports AAR synthesis prompt (#15) and feeds Phase 2 NLP analysis. PII: Optional (anonymous by default, identified if instructor submission).",
+  "columns": [
+    {
+      "name": "EventTitle",
+      "type": "Text",
+      "required": true,
+      "description": "Name of the training event (links to TrainingSchedule.EventTitle)",
+      "maxLength": 255,
+      "indexed": true
+    },
+    {
+      "name": "EventCode",
+      "type": "Text",
+      "required": false,
+      "description": "Links to TrainingSchedule.EventCode",
+      "maxLength": 20
+    },
+    {
+      "name": "EventDate",
+      "type": "DateTime",
+      "required": true,
+      "dateOnly": true,
+      "indexed": true
+    },
+    {
+      "name": "TrainingPhase",
+      "type": "Choice",
+      "required": true,
+      "choices": ["Phase I - Individual Skills", "Phase II - Squad", "Phase III - Platoon", "Phase IV - MAGTF"],
+      "indexed": true
+    },
+    {
+      "name": "CompanyAssigned",
+      "type": "Choice",
+      "required": true,
+      "choices": ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "India", "Mike"],
+      "indexed": true
+    },
+    {
+      "name": "SubmitterRole",
+      "type": "Choice",
+      "required": true,
+      "choices": ["Student", "SPC", "Instructor", "Observer"],
+      "description": "Role of the person providing feedback"
+    },
+    {
+      "name": "SubmitterName",
+      "type": "Text",
+      "required": false,
+      "maxLength": 100,
+      "description": "Optional — student feedback may be anonymous. Instructor submissions should be identified. PII when populated."
+    },
+    {
+      "name": "OverallRating",
+      "type": "Choice",
+      "required": true,
+      "choices": ["1 - Ineffective", "2 - Below Average", "3 - Average", "4 - Above Average", "5 - Excellent"],
+      "description": "Overall event effectiveness"
+    },
+    {
+      "name": "ObjectivesMet",
+      "type": "Choice",
+      "required": true,
+      "choices": ["All objectives met", "Most objectives met", "Some objectives met", "Few objectives met", "No objectives met"],
+      "description": "Were the stated training objectives achieved?"
+    },
+    {
+      "name": "InstructorEffectiveness",
+      "type": "Choice",
+      "required": false,
+      "choices": ["1 - Ineffective", "2 - Below Average", "3 - Average", "4 - Above Average", "5 - Excellent"],
+      "description": "Student feedback on instructor quality (student submissions only)"
+    },
+    {
+      "name": "TimeManagement",
+      "type": "Choice",
+      "required": false,
+      "choices": ["Too short", "About right", "Too long", "Significant dead time"],
+      "description": "Was the time allocated appropriate?"
+    },
+    {
+      "name": "ResourceAdequacy",
+      "type": "Choice",
+      "required": false,
+      "choices": ["Fully resourced", "Mostly adequate", "Some shortages", "Significant shortages"],
+      "description": "Were equipment, ammo, ranges, etc. adequate?"
+    },
+    {
+      "name": "Sustains",
+      "type": "MultilineText",
+      "required": false,
+      "description": "What went well — keep doing. Structured AAR field."
+    },
+    {
+      "name": "Improves",
+      "type": "MultilineText",
+      "required": false,
+      "description": "What to change next time. Structured AAR field."
+    },
+    {
+      "name": "SafetyConcerns",
+      "type": "MultilineText",
+      "required": false,
+      "description": "Any safety issues observed. Flagged for immediate review."
+    },
+    {
+      "name": "HasSafetyConcern",
+      "type": "Boolean",
+      "required": true,
+      "default": false,
+      "description": "Quick filter flag — true if SafetyConcerns is populated",
+      "indexed": true
+    },
+    {
+      "name": "AdditionalComments",
+      "type": "MultilineText",
+      "required": false
+    },
+    {
+      "name": "SubmittedDate",
+      "type": "DateTime",
+      "required": true,
+      "description": "Auto-set on form submission"
+    },
+    {
+      "name": "ReviewedBy",
+      "type": "Person",
+      "required": false,
+      "description": "SPC or staff member who reviewed this feedback"
+    },
+    {
+      "name": "ReviewStatus",
+      "type": "Choice",
+      "required": true,
+      "choices": ["Pending Review", "Reviewed", "Action Required", "Closed"],
+      "default": "Pending Review"
+    },
+    {
+      "name": "ActionTaken",
+      "type": "MultilineText",
+      "required": false,
+      "description": "What was done in response to this feedback"
+    }
+  ],
+  "views": [
+    {
+      "name": "Pending Review",
+      "description": "All unreviewed feedback requiring SPC/staff attention",
+      "columns": ["EventTitle", "EventDate", "CompanyAssigned", "SubmitterRole", "OverallRating", "ObjectivesMet", "HasSafetyConcern", "ReviewStatus"],
+      "filter": "ReviewStatus = Pending Review",
+      "sort": "SubmittedDate DESC",
+      "conditionalFormatting": {
+        "HasSafetyConcern = true": "red"
+      },
+      "access": "Staff, SPC (filtered to company)"
+    },
+    {
+      "name": "Safety Alerts",
+      "description": "All feedback with safety concerns — immediate review required",
+      "columns": ["EventTitle", "EventDate", "CompanyAssigned", "SubmitterRole", "SafetyConcerns", "ReviewStatus", "ActionTaken"],
+      "filter": "HasSafetyConcern = true",
+      "sort": "SubmittedDate DESC",
+      "access": "Staff only"
+    },
+    {
+      "name": "Event Summary",
+      "description": "All feedback for a specific event — supports AAR synthesis",
+      "columns": ["SubmitterRole", "OverallRating", "ObjectivesMet", "InstructorEffectiveness", "TimeManagement", "Sustains", "Improves"],
+      "filter": "EventCode = [SelectedEvent]",
+      "sort": "SubmitterRole ASC",
+      "access": "Staff, SPC (own company)"
+    },
+    {
+      "name": "Trend View",
+      "description": "Ratings over time for trend analysis in Power BI",
+      "columns": ["EventTitle", "TrainingPhase", "EventDate", "CompanyAssigned", "OverallRating", "ObjectivesMet", "InstructorEffectiveness"],
+      "sort": "EventDate DESC",
+      "access": "Staff only"
+    },
+    {
+      "name": "Submit Feedback",
+      "description": "Entry form view for students — anonymous by default",
+      "columns": ["EventTitle", "EventCode", "EventDate", "TrainingPhase", "CompanyAssigned", "OverallRating", "ObjectivesMet", "InstructorEffectiveness", "TimeManagement", "ResourceAdequacy", "Sustains", "Improves", "SafetyConcerns", "AdditionalComments"],
+      "access": "All roles (write own, read none)"
+    }
+  ],
+  "rowLevelSecurity": {
+    "Staff": "All rows",
+    "SPC": "CompanyAssigned = SPC's company",
+    "Student": "Write-only (submit form), cannot read others' feedback"
+  }
+}

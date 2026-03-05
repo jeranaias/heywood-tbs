@@ -1,0 +1,105 @@
+{
+  "listName": "RequiredQualifications",
+  "description": "Heywood Phase 1 — Master list of qualifications required to instruct specific TBS events. Reference table — no PII. Linked by QualificationRecords to individual instructors.",
+  "columns": [
+    {
+      "name": "QualCode",
+      "type": "Text",
+      "required": true,
+      "description": "Unique qualification identifier (e.g., 'RSO-RIFLE', 'OIC-DEMO', 'INST-LANDNAV')",
+      "maxLength": 30,
+      "indexed": true
+    },
+    {
+      "name": "QualName",
+      "type": "Text",
+      "required": true,
+      "description": "Full qualification name",
+      "maxLength": 150
+    },
+    {
+      "name": "Category",
+      "type": "Choice",
+      "required": true,
+      "choices": ["Range Safety", "Demolitions", "Weapons Instruction", "Tactics Instruction", "Land Navigation", "Water Survival", "Physical Training", "Combat Lifesaver", "Driving/Vehicle", "Instructor Certification", "Other"],
+      "indexed": true
+    },
+    {
+      "name": "IssuingAuthority",
+      "type": "Text",
+      "required": false,
+      "maxLength": 100,
+      "description": "Organization that certifies this qualification (e.g., 'WTBN Quantico', 'TECOM', 'Red Cross')"
+    },
+    {
+      "name": "ValidityMonths",
+      "type": "Number",
+      "required": true,
+      "min": 1,
+      "max": 120,
+      "description": "How many months the qualification remains valid before requiring renewal"
+    },
+    {
+      "name": "RenewalProcess",
+      "type": "MultilineText",
+      "required": false,
+      "description": "Steps required to renew (course, exam, practical, etc.)"
+    },
+    {
+      "name": "RequiredForEvents",
+      "type": "MultilineText",
+      "required": false,
+      "description": "Comma-separated EventCodes from TrainingSchedule that require this qualification"
+    },
+    {
+      "name": "MinimumPerEvent",
+      "type": "Number",
+      "required": false,
+      "min": 1,
+      "max": 20,
+      "description": "Minimum number of qualified personnel needed per event instance"
+    },
+    {
+      "name": "OrderReference",
+      "type": "Text",
+      "required": false,
+      "maxLength": 100,
+      "description": "MCO, NAVMC, SOP, or other order requiring this qualification"
+    },
+    {
+      "name": "Status",
+      "type": "Choice",
+      "required": true,
+      "choices": ["Active", "Superseded", "Archived"],
+      "default": "Active"
+    },
+    {
+      "name": "Notes",
+      "type": "MultilineText",
+      "required": false
+    }
+  ],
+  "views": [
+    {
+      "name": "All Active Qualifications",
+      "description": "Master list of all current qualifications",
+      "columns": ["QualCode", "QualName", "Category", "ValidityMonths", "MinimumPerEvent", "IssuingAuthority"],
+      "filter": "Status = Active",
+      "sort": "Category ASC, QualName ASC",
+      "access": "Staff, SPC (read-only)"
+    },
+    {
+      "name": "By Category",
+      "description": "Qualifications grouped by category for planning",
+      "columns": ["QualCode", "QualName", "ValidityMonths", "MinimumPerEvent", "OrderReference"],
+      "filter": "Status = Active",
+      "groupBy": "Category",
+      "access": "Staff only"
+    }
+  ],
+  "rowLevelSecurity": {
+    "Staff": "All rows (read/write)",
+    "SPC": "All rows (read-only)",
+    "Student": "No access"
+  }
+}

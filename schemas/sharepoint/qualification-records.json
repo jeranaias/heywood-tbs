@@ -1,0 +1,152 @@
+{
+  "listName": "QualificationRecords",
+  "description": "Heywood Phase 1 — Individual instructor qualification records with expiration tracking. PII: Yes (linked to instructor EDIPI). Drives the Instructor Qualification Dashboard alerts.",
+  "columns": [
+    {
+      "name": "InstructorEDIPI",
+      "type": "Text",
+      "required": true,
+      "description": "10-digit EDIPI linking to Instructors list. PII.",
+      "maxLength": 10,
+      "indexed": true
+    },
+    {
+      "name": "InstructorName",
+      "type": "Text",
+      "required": true,
+      "description": "Display name (Last, First) — denormalized for view performance. PII.",
+      "maxLength": 100
+    },
+    {
+      "name": "QualCode",
+      "type": "Text",
+      "required": true,
+      "description": "Links to RequiredQualifications.QualCode",
+      "maxLength": 30,
+      "indexed": true
+    },
+    {
+      "name": "QualName",
+      "type": "Text",
+      "required": true,
+      "description": "Denormalized from RequiredQualifications for display",
+      "maxLength": 150
+    },
+    {
+      "name": "DateEarned",
+      "type": "DateTime",
+      "required": true,
+      "dateOnly": true
+    },
+    {
+      "name": "ExpirationDate",
+      "type": "DateTime",
+      "required": true,
+      "dateOnly": true,
+      "indexed": true,
+      "description": "Calculated from DateEarned + RequiredQualifications.ValidityMonths"
+    },
+    {
+      "name": "DaysUntilExpiration",
+      "type": "Calculated",
+      "formula": "ExpirationDate - Today",
+      "description": "Drives 30/60/90 day alert thresholds in Power BI"
+    },
+    {
+      "name": "ExpirationStatus",
+      "type": "Calculated",
+      "formula": "IF(DaysUntilExpiration < 0, 'Expired', IF(DaysUntilExpiration <= 30, 'Critical (30 days)', IF(DaysUntilExpiration <= 60, 'Warning (60 days)', IF(DaysUntilExpiration <= 90, 'Caution (90 days)', 'Current'))))",
+      "description": "Color-coded status for dashboards"
+    },
+    {
+      "name": "CertificateNumber",
+      "type": "Text",
+      "required": false,
+      "maxLength": 50,
+      "description": "Certificate or credential number if applicable"
+    },
+    {
+      "name": "IssuedBy",
+      "type": "Text",
+      "required": false,
+      "maxLength": 100,
+      "description": "Certifying official or organization"
+    },
+    {
+      "name": "CompanyAtTimeOfCert",
+      "type": "Choice",
+      "required": false,
+      "choices": ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "India", "Mike", "HQ"],
+      "description": "Company assignment when qualification was earned"
+    },
+    {
+      "name": "RenewalStatus",
+      "type": "Choice",
+      "required": false,
+      "choices": ["N/A - Current", "Renewal Scheduled", "Renewal In Progress", "Renewal Overdue", "Waiver Requested"],
+      "default": "N/A - Current"
+    },
+    {
+      "name": "RenewalDate",
+      "type": "DateTime",
+      "required": false,
+      "dateOnly": true,
+      "description": "Scheduled date for renewal course/exam"
+    },
+    {
+      "name": "DocumentLink",
+      "type": "Hyperlink",
+      "required": false,
+      "description": "Link to scanned certificate or credential in SharePoint document library"
+    },
+    {
+      "name": "Notes",
+      "type": "MultilineText",
+      "required": false
+    }
+  ],
+  "views": [
+    {
+      "name": "Expiring Soon",
+      "description": "Qualifications expiring within 90 days — primary alert view",
+      "columns": ["InstructorName", "QualCode", "QualName", "ExpirationDate", "DaysUntilExpiration", "ExpirationStatus", "RenewalStatus"],
+      "filter": "DaysUntilExpiration <= 90 AND DaysUntilExpiration >= 0",
+      "sort": "DaysUntilExpiration ASC",
+      "conditionalFormatting": {
+        "DaysUntilExpiration <= 30": "red",
+        "DaysUntilExpiration <= 60": "orange",
+        "DaysUntilExpiration <= 90": "yellow"
+      },
+      "access": "Staff only"
+    },
+    {
+      "name": "Expired",
+      "description": "All currently expired qualifications requiring immediate action",
+      "columns": ["InstructorName", "QualCode", "QualName", "ExpirationDate", "DaysUntilExpiration", "RenewalStatus"],
+      "filter": "DaysUntilExpiration < 0",
+      "sort": "DaysUntilExpiration ASC",
+      "access": "Staff only"
+    },
+    {
+      "name": "Instructor Quals",
+      "description": "All qualifications for a specific instructor",
+      "columns": ["QualCode", "QualName", "DateEarned", "ExpirationDate", "ExpirationStatus", "RenewalStatus"],
+      "filter": "InstructorEDIPI = [SelectedInstructor]",
+      "sort": "ExpirationDate ASC",
+      "access": "Staff, SPC (own company instructors)"
+    },
+    {
+      "name": "Qualification Coverage",
+      "description": "All holders of a specific qualification — for event staffing",
+      "columns": ["InstructorName", "CompanyAtTimeOfCert", "DateEarned", "ExpirationDate", "ExpirationStatus"],
+      "filter": "QualCode = [SelectedQual] AND DaysUntilExpiration >= 0",
+      "sort": "ExpirationDate ASC",
+      "access": "Staff only"
+    }
+  ],
+  "rowLevelSecurity": {
+    "Staff": "All rows",
+    "SPC": "InstructorEDIPI in SPC's company instructors",
+    "Student": "No access"
+  }
+}

@@ -1,0 +1,299 @@
+{
+  "listName": "StudentScores",
+  "description": "Heywood Phase 1 — Individual student performance data across TBS three-pillar grading system. PII: Yes (linked to student identifiers). PIA threshold analysis required.",
+  "columns": [
+    {
+      "name": "StudentEDIPI",
+      "type": "Text",
+      "required": true,
+      "description": "10-digit EDIPI — primary student identifier. PII.",
+      "maxLength": 10,
+      "indexed": true
+    },
+    {
+      "name": "LastName",
+      "type": "Text",
+      "required": true,
+      "description": "Student last name. PII.",
+      "maxLength": 50
+    },
+    {
+      "name": "FirstName",
+      "type": "Text",
+      "required": true,
+      "description": "Student first name. PII.",
+      "maxLength": 50
+    },
+    {
+      "name": "Rank",
+      "type": "Choice",
+      "required": true,
+      "choices": ["2ndLt", "1stLt", "WO"],
+      "default": "2ndLt"
+    },
+    {
+      "name": "Company",
+      "type": "Choice",
+      "required": true,
+      "choices": ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "India", "Mike"],
+      "indexed": true
+    },
+    {
+      "name": "Platoon",
+      "type": "Choice",
+      "required": true,
+      "choices": ["1st", "2nd", "3rd", "4th"]
+    },
+    {
+      "name": "SPCAssigned",
+      "type": "Person",
+      "required": true,
+      "description": "Staff Platoon Commander responsible for this student"
+    },
+    {
+      "name": "ClassNumber",
+      "type": "Text",
+      "required": true,
+      "description": "TBS class identifier (e.g., '1-26' for first class of 2026)",
+      "indexed": true
+    },
+    {
+      "name": "ClassStartDate",
+      "type": "DateTime",
+      "required": true,
+      "dateOnly": true
+    },
+    {
+      "name": "CurrentPhase",
+      "type": "Choice",
+      "required": true,
+      "choices": ["Phase I - Individual Skills", "Phase II - Squad", "Phase III - Platoon", "Phase IV - MAGTF", "Complete"],
+      "default": "Phase I - Individual Skills"
+    },
+    {
+      "name": "AcademicExam1",
+      "type": "Number",
+      "required": false,
+      "min": 0,
+      "max": 100,
+      "description": "Phase I written exam score (percentage)"
+    },
+    {
+      "name": "AcademicExam2",
+      "type": "Number",
+      "required": false,
+      "min": 0,
+      "max": 100,
+      "description": "Phase II written exam score (percentage)"
+    },
+    {
+      "name": "AcademicExam3",
+      "type": "Number",
+      "required": false,
+      "min": 0,
+      "max": 100,
+      "description": "Phase III written exam score (percentage)"
+    },
+    {
+      "name": "AcademicExam4",
+      "type": "Number",
+      "required": false,
+      "min": 0,
+      "max": 100,
+      "description": "Phase IV written exam score (percentage)"
+    },
+    {
+      "name": "AcademicQuizAvg",
+      "type": "Number",
+      "required": false,
+      "min": 0,
+      "max": 100,
+      "description": "Running average of all quiz scores"
+    },
+    {
+      "name": "AcademicComposite",
+      "type": "Calculated",
+      "formula": "Average of exams and quiz average — weighted per TBS grading policy",
+      "description": "Overall academics score (32% of total grade)"
+    },
+    {
+      "name": "PFTScore",
+      "type": "Number",
+      "required": false,
+      "min": 0,
+      "max": 300
+    },
+    {
+      "name": "CFTScore",
+      "type": "Number",
+      "required": false,
+      "min": 0,
+      "max": 300
+    },
+    {
+      "name": "RifleQual",
+      "type": "Choice",
+      "required": false,
+      "choices": ["Expert", "Sharpshooter", "Marksman", "Unqualified"]
+    },
+    {
+      "name": "PistolQual",
+      "type": "Choice",
+      "required": false,
+      "choices": ["Expert", "Sharpshooter", "Marksman", "Unqualified"]
+    },
+    {
+      "name": "LandNavDay",
+      "type": "Choice",
+      "required": false,
+      "choices": ["Pass", "Fail", "Not Yet Tested"]
+    },
+    {
+      "name": "LandNavNight",
+      "type": "Choice",
+      "required": false,
+      "choices": ["Pass", "Fail", "Not Yet Tested"]
+    },
+    {
+      "name": "LandNavWritten",
+      "type": "Number",
+      "required": false,
+      "min": 0,
+      "max": 100
+    },
+    {
+      "name": "ObstacleCourse",
+      "type": "Choice",
+      "required": false,
+      "choices": ["Pass", "Fail", "Not Yet Tested"]
+    },
+    {
+      "name": "EnduranceCourse",
+      "type": "Choice",
+      "required": false,
+      "choices": ["Pass", "Fail", "Not Yet Tested"]
+    },
+    {
+      "name": "MilSkillsComposite",
+      "type": "Calculated",
+      "formula": "Weighted composite of PFT, CFT, rifle, pistol, land nav, obstacles — per TBS grading policy",
+      "description": "Overall military skills score (32% of total grade)"
+    },
+    {
+      "name": "LeadershipWeek12",
+      "type": "Number",
+      "required": false,
+      "min": 0,
+      "max": 100,
+      "description": "Midpoint leadership evaluation score (14% of total grade). SPC-assigned."
+    },
+    {
+      "name": "LeadershipWeek22",
+      "type": "Number",
+      "required": false,
+      "min": 0,
+      "max": 100,
+      "description": "Final leadership evaluation score (22% of total grade). SPC-assigned."
+    },
+    {
+      "name": "PeerEvalWeek12",
+      "type": "Number",
+      "required": false,
+      "min": 0,
+      "max": 100,
+      "description": "Midpoint peer evaluation score (portion of leadership grade)"
+    },
+    {
+      "name": "PeerEvalWeek22",
+      "type": "Number",
+      "required": false,
+      "min": 0,
+      "max": 100,
+      "description": "Final peer evaluation score (portion of leadership grade)"
+    },
+    {
+      "name": "LeadershipComposite",
+      "type": "Calculated",
+      "formula": "Week12 (14%) + Week22 (22%) with SPC (90%) and Peer (10%) weighting",
+      "description": "Overall leadership score (36% of total grade)"
+    },
+    {
+      "name": "OverallComposite",
+      "type": "Calculated",
+      "formula": "(AcademicComposite * 0.32) + (MilSkillsComposite * 0.32) + (LeadershipComposite * 0.36)",
+      "description": "Total TBS grade — determines class standing and MOS assignment"
+    },
+    {
+      "name": "ClassStandingThird",
+      "type": "Choice",
+      "required": false,
+      "choices": ["Top Third", "Middle Third", "Bottom Third"],
+      "description": "Updated after each graded event"
+    },
+    {
+      "name": "CompanyRank",
+      "type": "Number",
+      "required": false,
+      "min": 1,
+      "description": "Rank order within company (1 = highest)"
+    },
+    {
+      "name": "AtRiskFlag",
+      "type": "Choice",
+      "required": false,
+      "choices": ["None", "Academic (<75%)", "MilSkills (<75%)", "Leadership (<75%)", "Multiple (<75%)", "Declining Trend"],
+      "default": "None",
+      "description": "Auto-set or manually flagged when student falls below threshold"
+    },
+    {
+      "name": "Status",
+      "type": "Choice",
+      "required": true,
+      "choices": ["Active", "Medical Hold (Mike Co)", "Academic Hold", "Administrative Hold", "Graduated", "Dropped"],
+      "default": "Active"
+    },
+    {
+      "name": "Notes",
+      "type": "MultilineText",
+      "required": false,
+      "description": "SPC notes — do not include PHI"
+    }
+  ],
+  "views": [
+    {
+      "name": "Company Overview",
+      "description": "All active students in one company, sorted by CompanyRank",
+      "columns": ["LastName", "FirstName", "Rank", "Platoon", "CurrentPhase", "AcademicComposite", "MilSkillsComposite", "LeadershipComposite", "OverallComposite", "CompanyRank", "AtRiskFlag"],
+      "filter": "Status = Active",
+      "sort": "CompanyRank ASC",
+      "access": "Staff, SPC (filtered to their company)"
+    },
+    {
+      "name": "At Risk Students",
+      "description": "Students with AtRiskFlag != None",
+      "columns": ["LastName", "FirstName", "Company", "Platoon", "AtRiskFlag", "OverallComposite", "SPCAssigned"],
+      "filter": "AtRiskFlag != None AND Status = Active",
+      "access": "Staff, SPC (filtered to their company)"
+    },
+    {
+      "name": "My Record",
+      "description": "Student sees only their own record",
+      "columns": ["CurrentPhase", "AcademicExam1-4", "AcademicQuizAvg", "AcademicComposite", "PFTScore", "CFTScore", "RifleQual", "PistolQual", "LandNavDay", "LandNavNight", "MilSkillsComposite", "LeadershipWeek12", "LeadershipWeek22", "LeadershipComposite", "OverallComposite", "ClassStandingThird"],
+      "filter": "StudentEDIPI = CurrentUser.EDIPI",
+      "access": "Student (own record only)"
+    },
+    {
+      "name": "Graduation Report",
+      "description": "Final standings for graduating class",
+      "columns": ["LastName", "FirstName", "Rank", "Company", "OverallComposite", "CompanyRank", "ClassStandingThird"],
+      "filter": "Status = Graduated",
+      "sort": "OverallComposite DESC",
+      "access": "Staff only"
+    }
+  ],
+  "rowLevelSecurity": {
+    "Staff": "All rows, all companies",
+    "SPC": "Filtered by Company = SPC's assigned company",
+    "Student": "Filtered by StudentEDIPI = current user's EDIPI"
+  }
+}

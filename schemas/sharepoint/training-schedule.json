@@ -1,0 +1,203 @@
+{
+  "listName": "TrainingSchedule",
+  "description": "Heywood Phase 1 — TBS master training schedule with event-level detail across all four phases. PII: No. Links to company/platoon, not individual students.",
+  "columns": [
+    {
+      "name": "EventTitle",
+      "type": "Text",
+      "required": true,
+      "description": "Name of the training event (e.g., 'Land Navigation Day Practical')",
+      "maxLength": 255,
+      "indexed": true
+    },
+    {
+      "name": "EventCode",
+      "type": "Text",
+      "required": false,
+      "description": "POI event reference code if applicable",
+      "maxLength": 20
+    },
+    {
+      "name": "TrainingPhase",
+      "type": "Choice",
+      "required": true,
+      "choices": ["Phase I - Individual Skills", "Phase II - Squad", "Phase III - Platoon", "Phase IV - MAGTF"],
+      "indexed": true
+    },
+    {
+      "name": "Category",
+      "type": "Choice",
+      "required": true,
+      "choices": ["Academic", "Military Skills", "Leadership", "Physical Training", "Field Exercise", "Evaluation", "Admin"],
+      "indexed": true
+    },
+    {
+      "name": "GradePillar",
+      "type": "Choice",
+      "required": false,
+      "choices": ["Academics (32%)", "Military Skills (32%)", "Leadership (36%)", "Not Graded"],
+      "description": "Which of the three TBS grading pillars this event falls under"
+    },
+    {
+      "name": "IsGraded",
+      "type": "Boolean",
+      "required": true,
+      "default": false,
+      "description": "Whether this event produces a score that feeds into composites"
+    },
+    {
+      "name": "StartDate",
+      "type": "DateTime",
+      "required": true,
+      "dateOnly": true,
+      "indexed": true
+    },
+    {
+      "name": "EndDate",
+      "type": "DateTime",
+      "required": true,
+      "dateOnly": true
+    },
+    {
+      "name": "StartTime",
+      "type": "DateTime",
+      "required": false,
+      "timeOnly": true
+    },
+    {
+      "name": "EndTime",
+      "type": "DateTime",
+      "required": false,
+      "timeOnly": true
+    },
+    {
+      "name": "DurationHours",
+      "type": "Number",
+      "required": false,
+      "min": 0.5,
+      "max": 240,
+      "description": "Total event duration in hours (multi-day events can exceed 24)"
+    },
+    {
+      "name": "Location",
+      "type": "Text",
+      "required": false,
+      "maxLength": 100,
+      "description": "Training area, range, classroom, or field location"
+    },
+    {
+      "name": "CompanyAssigned",
+      "type": "Choice",
+      "required": true,
+      "choices": ["All", "Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "India", "Mike"],
+      "default": "All",
+      "indexed": true
+    },
+    {
+      "name": "ClassNumber",
+      "type": "Text",
+      "required": true,
+      "description": "TBS class identifier (e.g., '1-26')",
+      "indexed": true
+    },
+    {
+      "name": "LeadInstructor",
+      "type": "Person",
+      "required": false,
+      "description": "Primary instructor or OIC for this event"
+    },
+    {
+      "name": "SupportInstructors",
+      "type": "PersonMulti",
+      "required": false,
+      "description": "Additional instructors or safety personnel required"
+    },
+    {
+      "name": "InstructorCountRequired",
+      "type": "Number",
+      "required": false,
+      "min": 1,
+      "max": 50,
+      "description": "Total number of instructors needed"
+    },
+    {
+      "name": "PrerequisiteEvents",
+      "type": "Text",
+      "required": false,
+      "description": "Comma-separated EventCodes that must be complete before this event"
+    },
+    {
+      "name": "SpecialEquipment",
+      "type": "MultilineText",
+      "required": false,
+      "description": "Equipment, ammunition, or range requirements"
+    },
+    {
+      "name": "Status",
+      "type": "Choice",
+      "required": true,
+      "choices": ["Scheduled", "In Progress", "Complete", "Postponed", "Cancelled"],
+      "default": "Scheduled"
+    },
+    {
+      "name": "WeatherContingency",
+      "type": "Choice",
+      "required": false,
+      "choices": ["No Impact", "Rain Plan Available", "Lightning Hold Applies", "Cold Weather Threshold", "Heat Cat Dependent"],
+      "default": "No Impact"
+    },
+    {
+      "name": "Notes",
+      "type": "MultilineText",
+      "required": false
+    }
+  ],
+  "views": [
+    {
+      "name": "Weekly Calendar",
+      "description": "All events for the current week, grouped by day",
+      "columns": ["EventTitle", "Category", "StartDate", "StartTime", "EndTime", "Location", "CompanyAssigned", "LeadInstructor", "Status"],
+      "filter": "StartDate >= [ThisWeekStart] AND StartDate <= [ThisWeekEnd]",
+      "sort": "StartDate ASC, StartTime ASC",
+      "groupBy": "StartDate",
+      "access": "All roles"
+    },
+    {
+      "name": "Phase View",
+      "description": "All events grouped by training phase",
+      "columns": ["EventTitle", "Category", "GradePillar", "IsGraded", "StartDate", "EndDate", "DurationHours", "Status"],
+      "groupBy": "TrainingPhase",
+      "sort": "StartDate ASC",
+      "access": "Staff, SPC"
+    },
+    {
+      "name": "Company Schedule",
+      "description": "Events for a specific company, filtered by CompanyAssigned",
+      "columns": ["EventTitle", "TrainingPhase", "Category", "StartDate", "StartTime", "Location", "LeadInstructor", "Status"],
+      "filter": "CompanyAssigned = [CurrentUserCompany] OR CompanyAssigned = All",
+      "sort": "StartDate ASC",
+      "access": "SPC (filtered to company), Student (read-only)"
+    },
+    {
+      "name": "Instructor Assignments",
+      "description": "Events with instructor assignment details for workload planning",
+      "columns": ["EventTitle", "StartDate", "CompanyAssigned", "LeadInstructor", "SupportInstructors", "InstructorCountRequired", "Status"],
+      "filter": "Status = Scheduled OR Status = In Progress",
+      "sort": "StartDate ASC",
+      "access": "Staff only"
+    },
+    {
+      "name": "Graded Events Tracker",
+      "description": "Only graded events with pillar assignments",
+      "columns": ["EventTitle", "TrainingPhase", "GradePillar", "StartDate", "CompanyAssigned", "Status"],
+      "filter": "IsGraded = true",
+      "sort": "TrainingPhase ASC, StartDate ASC",
+      "access": "Staff, SPC"
+    }
+  ],
+  "rowLevelSecurity": {
+    "Staff": "All rows",
+    "SPC": "CompanyAssigned = SPC's company OR CompanyAssigned = All",
+    "Student": "CompanyAssigned = student's company OR CompanyAssigned = All (read-only)"
+  }
+}
