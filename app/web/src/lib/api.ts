@@ -297,6 +297,10 @@ export const api = {
     return get<{ events: CalendarEvent[]; date: string }>('/calendar/today')
   },
 
+  createCalendarEvent: async (event: Partial<CalendarEvent>) => {
+    return post<CalendarEvent>('/calendar/events', event)
+  },
+
   getMailSummary: async () => {
     return get<{ messages: MailSummary[]; unreadCount: number }>('/mail/summary')
   },

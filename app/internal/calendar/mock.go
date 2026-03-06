@@ -297,3 +297,10 @@ func (m *MockCalendar) GetMailSummary(role string) []models.MailSummary {
 		return nil
 	}
 }
+
+// CreateEvent adds a mock event (in demo mode, just returns the event with a generated ID).
+func (m *MockCalendar) CreateEvent(event models.CalendarEvent) (models.CalendarEvent, error) {
+	event.ID = fmt.Sprintf("demo-%d", time.Now().UnixMilli())
+	event.Source = "outlook"
+	return event, nil
+}

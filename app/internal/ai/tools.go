@@ -173,6 +173,66 @@ var HeywoodTools = []openai.Tool{
 			}),
 		},
 	},
+	{
+		Type: openai.ToolTypeFunction,
+		Function: &openai.FunctionDefinition{
+			Name:        "setup_guide",
+			Description: "Get setup instructions and current configuration status. Use when the user asks about configuring Heywood, connecting Outlook, uploading rosters, setting up AI, or any settings-related question. Returns current config state and step-by-step guidance.",
+			Parameters: jsonSchema(map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"topic": map[string]interface{}{
+						"type":        "string",
+						"enum":        []string{"overview", "student-data", "ai", "outlook", "sharepoint", "database"},
+						"description": "Which setup topic to get guidance on",
+					},
+				},
+				"required": []string{"topic"},
+			}),
+		},
+	},
+	{
+		Type: openai.ToolTypeFunction,
+		Function: &openai.FunctionDefinition{
+			Name:        "schedule_event",
+			Description: "Create a calendar event for the current user. Use when asked to schedule a meeting, counseling session, training block, or any event. Examples: 'schedule a counseling session with 2ndLt Thompson Friday at 1400', 'block off 0800-1000 tomorrow for AAR prep'.",
+			Parameters: jsonSchema(map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"title": map[string]interface{}{
+						"type":        "string",
+						"description": "Event title, e.g. 'Counseling — 2ndLt Thompson'",
+					},
+					"date": map[string]interface{}{
+						"type":        "string",
+						"description": "Date in YYYY-MM-DD format or relative ('today', 'tomorrow', 'friday')",
+					},
+					"start_time": map[string]interface{}{
+						"type":        "string",
+						"description": "Start time in HH:MM (24h) format, e.g. '14:00'",
+					},
+					"end_time": map[string]interface{}{
+						"type":        "string",
+						"description": "End time in HH:MM (24h) format, e.g. '15:00'",
+					},
+					"location": map[string]interface{}{
+						"type":        "string",
+						"description": "Location or room, e.g. 'Staff Office', 'Gruber Hall Room 201'",
+					},
+					"description": map[string]interface{}{
+						"type":        "string",
+						"description": "Optional event description or notes",
+					},
+					"category": map[string]interface{}{
+						"type":        "string",
+						"enum":        []string{"training", "admin", "personal"},
+						"description": "Event category",
+					},
+				},
+				"required": []string{"title", "date", "start_time", "end_time"},
+			}),
+		},
+	},
 }
 
 // jsonSchema converts a map to json.RawMessage for the Parameters field.

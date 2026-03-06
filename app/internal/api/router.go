@@ -73,6 +73,7 @@ func SetupRouter(h *Handler) *http.ServeMux {
 
 	// Calendar
 	mux.HandleFunc("GET /api/v1/calendar/events", h.handleCalendarEvents)
+	mux.HandleFunc("POST /api/v1/calendar/events", h.handleCreateCalendarEvent)
 	mux.HandleFunc("GET /api/v1/calendar/today", h.handleCalendarToday)
 	mux.HandleFunc("GET /api/v1/mail/summary", h.handleMailSummary)
 	mux.HandleFunc("GET /api/v1/mail/unread-count", h.handleMailUnreadCount)

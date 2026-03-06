@@ -11,6 +11,7 @@ import (
 type CalendarProvider interface {
 	GetEvents(role, company string, start, end time.Time) []models.CalendarEvent
 	GetMailSummary(role string) []models.MailSummary
+	CreateEvent(event models.CalendarEvent) (models.CalendarEvent, error)
 }
 
 // OutlookCalendar connects to Microsoft Graph API for real calendar/mail data.
@@ -33,6 +34,12 @@ func (o *OutlookCalendar) GetEvents(role, company string, start, end time.Time) 
 func (o *OutlookCalendar) GetMailSummary(role string) []models.MailSummary {
 	// Stub: returns empty until Graph SDK is integrated
 	return nil
+}
+
+// CreateEvent creates a calendar event in Outlook via Microsoft Graph.
+// TODO: implement with msgraph-sdk-go when dependency is added.
+func (o *OutlookCalendar) CreateEvent(event models.CalendarEvent) (models.CalendarEvent, error) {
+	return event, nil
 }
 
 // GraphEndpoint returns the Microsoft Graph base URL for the configured cloud.

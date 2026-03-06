@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -117,6 +118,23 @@ func (h *Handler) handleMailUnreadCount(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, 200, map[string]interface{}{"count": unread})
+}
+
+// handleCreateCalendarEvent creates a new calendar event.
+func (h *Handler) handleCreateCalendarEvent(w http.ResponseWriter, r *http.Request) {
+	var event models.CalendarEvent
+	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid event data"})
+		return
+	}
+
+	created, err := calendarProvider.CreateEvent(event)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, 201, created)
 }
 
 // scheduleToCalendarEvents converts TBS training schedule to calendar events.
