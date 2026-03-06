@@ -914,6 +914,98 @@ func (h *Handler) mockResponse(role, company, studentID, message string) string 
 		return b.String()
 	}
 
+	// Exam results — student asks about test performance
+	if containsAny(msg, "exam", "test", "quiz", "study", "missed", "wrong", "score") {
+		// Figure out which student
+		sid := ""
+		if role == "student" && studentID != "" {
+			sid = studentID
+		} else if s := extractStudentID(msg); s != "" {
+			sid = s
+		}
+
+		if sid != "" {
+			// Try to determine exam number from message
+			examNum := 0
+			for i := 1; i <= 4; i++ {
+				if strings.Contains(msg, fmt.Sprintf("exam %d", i)) || strings.Contains(msg, fmt.Sprintf("exam%d", i)) || strings.Contains(msg, fmt.Sprintf("test %d", i)) {
+					examNum = i
+					break
+				}
+			}
+
+			st, ok := h.store.GetStudent(sid)
+			if ok {
+				// If no specific exam mentioned, find their most recent exam with a score
+				if examNum == 0 {
+					if st.Exam4 > 0 {
+						examNum = 4
+					} else if st.Exam3 > 0 {
+						examNum = 3
+					} else if st.Exam2 > 0 {
+						examNum = 2
+					} else {
+						examNum = 1
+					}
+				}
+
+				results := h.store.GetExamResults(sid, examNum)
+				if results != nil {
+					var b strings.Builder
+					fmt.Fprintf(&b, "## Exam %d Results — %s %s\n\n", examNum, st.Rank, st.LastName)
+					fmt.Fprintf(&b, "**Score: %.1f%%** (%d/%d correct)\n\n", results.Score, results.Correct, results.Total)
+
+					// Group by topic
+					topicCorrect := make(map[string]int)
+					topicTotal := make(map[string]int)
+					var weakTopics []string
+					for _, q := range results.Questions {
+						topicTotal[q.Topic]++
+						if q.Correct {
+							topicCorrect[q.Topic]++
+						}
+					}
+
+					b.WriteString("### Performance by Topic\n\n")
+					b.WriteString("| Topic | Score | Status |\n|-------|-------|--------|\n")
+					for topic, total := range topicTotal {
+						correct := topicCorrect[topic]
+						pct := float64(correct) / float64(total) * 100
+						status := "Strong"
+						if pct < 60 {
+							status = "**Needs Work**"
+							weakTopics = append(weakTopics, topic)
+						} else if pct < 80 {
+							status = "Fair"
+							weakTopics = append(weakTopics, topic)
+						}
+						fmt.Fprintf(&b, "| %s | %d/%d (%.0f%%) | %s |\n", topic, correct, total, pct, status)
+					}
+
+					if len(weakTopics) > 0 {
+						b.WriteString("\n### Study Recommendations\n\n")
+						b.WriteString("Focus your study time on these areas:\n")
+						for _, t := range weakTopics {
+							fmt.Fprintf(&b, "- **%s** — review your course materials and reference publications for this topic\n", t)
+						}
+					} else {
+						b.WriteString("\nStrong performance across all topic areas. Keep up the good work.\n")
+					}
+
+					b.WriteString("\n*Note: Specific test questions and answers cannot be shared. This analysis shows topic-level performance only.*")
+					return b.String()
+				}
+				return fmt.Sprintf("No detailed exam results on file for %s %s yet. Their exam scores are: Exam 1: %.0f, Exam 2: %.0f, Exam 3: %.0f, Exam 4: %.0f.",
+					st.Rank, st.LastName, st.Exam1, st.Exam2, st.Exam3, st.Exam4)
+			}
+		}
+
+		if role == "student" {
+			return "I can look up your exam results and show you which topic areas to focus on. Try asking \"How did I do on Exam 1?\" or \"What should I study for?\""
+		}
+		return "I can look up exam results for any student. Specify the student ID, e.g. \"How did STU-042 do on Exam 1?\""
+	}
+
 	if containsAny(msg, "how", "overall", "status", "summary", "doing") {
 		stats := h.store.StudentStats(company)
 		return fmt.Sprintf("**Company Status Overview:**\n\n"+
