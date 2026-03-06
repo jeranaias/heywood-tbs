@@ -7,6 +7,7 @@ import {
   Shield,
   Calendar,
   User,
+  ClipboardList,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -17,6 +18,7 @@ interface SidebarProps {
 export function Sidebar({ role, onClose }: SidebarProps) {
   const links = [
     { to: '/chat', label: 'Chat', icon: MessageSquare, roles: ['xo', 'staff', 'spc', 'student'] },
+    { to: '/tasks', label: 'Task Inbox', icon: ClipboardList, roles: ['xo', 'staff', 'spc'] },
     { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['xo', 'staff', 'spc'] },
     { to: '/students', label: 'Students', icon: Users, roles: ['xo', 'staff', 'spc'] },
     { to: '/at-risk', label: 'At-Risk', icon: AlertTriangle, roles: ['xo', 'staff', 'spc'] },
@@ -70,7 +72,9 @@ export function Sidebar({ role, onClose }: SidebarProps) {
       {/* Role indicator */}
       <div className="px-4 py-3 border-t border-slate-700">
         <div className="text-xs text-slate-500 uppercase tracking-wider">Current Role</div>
-        <div className="text-sm text-slate-300 mt-1 capitalize">{role}</div>
+        <div className="text-sm text-slate-300 mt-1">
+          {role === 'xo' ? 'XO' : role === 'spc' ? 'SPC' : role.charAt(0).toUpperCase() + role.slice(1)}
+        </div>
       </div>
     </div>
   )

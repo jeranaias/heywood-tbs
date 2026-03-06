@@ -131,22 +131,27 @@ func (h *Handler) handleChat(w http.ResponseWriter, r *http.Request) {
 		Content: userMessage,
 	})
 
+	// Tools are available for all roles
+	tools := ai.HeywoodTools
+
 	// Streaming mode
 	if req.Stream {
-		h.handleStreamingChat(w, r, messages)
+		h.handleStreamingChat(w, r, messages, tools, role)
 		return
 	}
 
 	// Non-streaming mode
-	resp, err := h.chatSvc.client.CreateChatCompletion(
-		r.Context(),
-		openai.ChatCompletionRequest{
-			Model:       h.chatSvc.model,
-			Messages:    messages,
-			MaxTokens:   4096,
-			Temperature: 0.7,
-		},
-	)
+	chatReq := openai.ChatCompletionRequest{
+		Model:       h.chatSvc.model,
+		Messages:    messages,
+		MaxTokens:   4096,
+		Temperature: 0.7,
+	}
+	if len(tools) > 0 {
+		chatReq.Tools = tools
+	}
+
+	resp, err := h.chatSvc.client.CreateChatCompletion(r.Context(), chatReq)
 	if err != nil {
 		slog.Error("openai error", "error", err)
 		response := h.mockResponse(role, company, studentID, req.Message)
@@ -159,13 +164,45 @@ func (h *Handler) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Handle tool calls — execute tools and re-send for final answer
+	choice := resp.Choices[0]
+	if choice.FinishReason == openai.FinishReasonToolCalls && len(choice.Message.ToolCalls) > 0 {
+		messages = append(messages, choice.Message)
+		for _, tc := range choice.Message.ToolCalls {
+			result := h.executeToolCall(tc, role)
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:       "tool",
+				Content:    result,
+				ToolCallID: tc.ID,
+			})
+		}
+		// Re-send without tools to get final response
+		resp2, err := h.chatSvc.client.CreateChatCompletion(r.Context(), openai.ChatCompletionRequest{
+			Model:       h.chatSvc.model,
+			Messages:    messages,
+			MaxTokens:   4096,
+			Temperature: 0.7,
+		})
+		if err != nil {
+			slog.Error("openai tool follow-up error", "error", err)
+			writeError(w, 500, "AI follow-up failed")
+			return
+		}
+		if len(resp2.Choices) > 0 {
+			writeJSON(w, 200, models.ChatResponse{Response: resp2.Choices[0].Message.Content})
+			return
+		}
+	}
+
 	writeJSON(w, 200, models.ChatResponse{
-		Response: resp.Choices[0].Message.Content,
+		Response: choice.Message.Content,
 	})
 }
 
 // handleStreamingChat sends the response as Server-Sent Events.
-func (h *Handler) handleStreamingChat(w http.ResponseWriter, r *http.Request, messages []openai.ChatCompletionMessage) {
+// If the model returns tool calls, they are executed synchronously and the
+// final response is then streamed.
+func (h *Handler) handleStreamingChat(w http.ResponseWriter, r *http.Request, messages []openai.ChatCompletionMessage, tools []openai.Tool, role string) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeError(w, 500, "streaming not supported")
@@ -177,6 +214,64 @@ func (h *Handler) handleStreamingChat(w http.ResponseWriter, r *http.Request, me
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
+	// If tools are available, do a non-streaming call first to check for tool calls.
+	// Tool calls are fast (small response) and we need the full response before streaming.
+	if len(tools) > 0 {
+		resp, err := h.chatSvc.client.CreateChatCompletion(r.Context(), openai.ChatCompletionRequest{
+			Model:       h.chatSvc.model,
+			Messages:    messages,
+			MaxTokens:   4096,
+			Temperature: 0.7,
+			Tools:       tools,
+		})
+		if err != nil {
+			slog.Error("tool check error", "error", err)
+			// Fall through to normal streaming without tools
+		} else if len(resp.Choices) > 0 && resp.Choices[0].FinishReason == openai.FinishReasonToolCalls {
+			// Execute tool calls
+			choice := resp.Choices[0]
+			messages = append(messages, choice.Message)
+			for _, tc := range choice.Message.ToolCalls {
+				result := h.executeToolCall(tc, role)
+				slog.Info("tool call executed", "tool", tc.Function.Name, "id", tc.ID)
+				messages = append(messages, openai.ChatCompletionMessage{
+					Role:       "tool",
+					Content:    result,
+					ToolCallID: tc.ID,
+				})
+			}
+			// Now stream the final response (no tools on follow-up)
+			h.streamMessages(w, r, flusher, messages)
+			return
+		} else if len(resp.Choices) > 0 && resp.Choices[0].Message.Content != "" {
+			// No tool calls — model responded directly.
+			// Simulate streaming by sending small character chunks (preserves all formatting).
+			content := resp.Choices[0].Message.Content
+			runes := []rune(content)
+			chunkSize := 6
+			for i := 0; i < len(runes); i += chunkSize {
+				end := i + chunkSize
+				if end > len(runes) {
+					end = len(runes)
+				}
+				chunk := string(runes[i:end])
+				data, _ := json.Marshal(map[string]string{"content": chunk})
+				fmt.Fprintf(w, "data: %s\n\n", data)
+				flusher.Flush()
+				time.Sleep(12 * time.Millisecond)
+			}
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			flusher.Flush()
+			return
+		}
+	}
+
+	// Standard streaming (no tools or tool check failed)
+	h.streamMessages(w, r, flusher, messages)
+}
+
+// streamMessages opens a streaming connection and sends SSE chunks.
+func (h *Handler) streamMessages(w http.ResponseWriter, r *http.Request, flusher http.Flusher, messages []openai.ChatCompletionMessage) {
 	stream, err := h.chatSvc.client.CreateChatCompletionStream(
 		r.Context(),
 		openai.ChatCompletionRequest{
@@ -217,9 +312,303 @@ func (h *Handler) handleStreamingChat(w http.ResponseWriter, r *http.Request, me
 				data, _ := json.Marshal(map[string]string{"content": chunk})
 				fmt.Fprintf(w, "data: %s\n\n", data)
 				flusher.Flush()
+				time.Sleep(8 * time.Millisecond)
 			}
 		}
 	}
+}
+
+// executeToolCall dispatches a tool call to the appropriate store method and returns the result as a string.
+func (h *Handler) executeToolCall(tc openai.ToolCall, callerRole string) string {
+	var args map[string]interface{}
+	if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
+		return fmt.Sprintf("Error parsing arguments: %v", err)
+	}
+
+	switch tc.Function.Name {
+	case "create_task":
+		return h.toolCreateTask(args, callerRole)
+	case "send_message":
+		return h.toolSendMessage(args, callerRole)
+	case "lookup_student":
+		return h.toolLookupStudent(args)
+	case "lookup_schedule":
+		return h.toolLookupSchedule(args)
+	case "web_search":
+		return h.toolWebSearch(args)
+	case "lookup_exam_results":
+		return h.toolLookupExamResults(args)
+	default:
+		return fmt.Sprintf("Unknown tool: %s", tc.Function.Name)
+	}
+}
+
+func (h *Handler) toolCreateTask(args map[string]interface{}, callerRole string) string {
+	title, _ := args["title"].(string)
+	desc, _ := args["description"].(string)
+	assignedTo, _ := args["assigned_to"].(string)
+	priority, _ := args["priority"].(string)
+	dueDate, _ := args["due_date"].(string)
+	relatedID, _ := args["related_id"].(string)
+
+	if priority == "" {
+		priority = "medium"
+	}
+
+	task := models.Task{
+		Title:       title,
+		Description: desc,
+		AssignedTo:  assignedTo,
+		CreatedBy:   "heywood",
+		Priority:    priority,
+		DueDate:     dueDate,
+		RelatedID:   relatedID,
+	}
+
+	if err := h.store.CreateTask(task); err != nil {
+		return fmt.Sprintf("Failed to create task: %v", err)
+	}
+
+	// Also create a notification for the assignee
+	_ = h.store.CreateNotification(models.Notification{
+		UserRole:  assignedTo,
+		Type:      "task",
+		Title:     "New Task: " + title,
+		Body:      fmt.Sprintf("Heywood has assigned you a %s-priority task: %s", priority, title),
+		ActionURL: "/tasks",
+	})
+
+	return fmt.Sprintf("Task created successfully. Assigned to %s with %s priority. Notification sent.", assignedTo, priority)
+}
+
+func (h *Handler) toolSendMessage(args map[string]interface{}, callerRole string) string {
+	to, _ := args["to"].(string)
+	subject, _ := args["subject"].(string)
+	body, _ := args["body"].(string)
+	relatedID, _ := args["related_id"].(string)
+
+	msg := models.Message{
+		From:      "heywood (on behalf of " + callerRole + ")",
+		To:        to,
+		Subject:   subject,
+		Body:      body,
+		RelatedID: relatedID,
+	}
+
+	if err := h.store.CreateMessage(msg); err != nil {
+		return fmt.Sprintf("Failed to send message: %v", err)
+	}
+
+	_ = h.store.CreateNotification(models.Notification{
+		UserRole: to,
+		Type:     "message",
+		Title:    "Message: " + subject,
+		Body:     "From: Heywood (XO) — " + subject,
+	})
+
+	return fmt.Sprintf("Message sent to %s. Subject: %s. Notification delivered.", to, subject)
+}
+
+func (h *Handler) toolLookupStudent(args map[string]interface{}) string {
+	query, _ := args["query"].(string)
+	if query == "" {
+		return "No query provided"
+	}
+
+	// Try exact ID first
+	if st, ok := h.store.GetStudent(strings.ToUpper(query)); ok {
+		return formatStudentForTool(st)
+	}
+
+	// Search by name
+	students := h.store.ListStudents("", "", query, false)
+	if len(students) == 0 {
+		return fmt.Sprintf("No students found matching '%s'", query)
+	}
+	if len(students) == 1 {
+		return formatStudentForTool(&students[0])
+	}
+
+	// Multiple matches — return summary
+	var b strings.Builder
+	fmt.Fprintf(&b, "Found %d students matching '%s':\n", len(students), query)
+	for _, s := range students {
+		fmt.Fprintf(&b, "- %s %s, %s (%s): Overall %.1f, %s\n", s.Rank, s.LastName, s.FirstName, s.ID, s.OverallComposite, s.Trend)
+	}
+	return b.String()
+}
+
+func formatStudentForTool(st *models.Student) string {
+	flags := strings.Join(st.RiskFlags, ", ")
+	if flags == "" {
+		flags = "none"
+	}
+	return fmt.Sprintf("Student: %s %s, %s (%s)\n"+
+		"Company: %s | Platoon: %s | Phase: %s | SPC: %s\n"+
+		"Academic: %.1f (Exams: %.0f, %.0f, %.0f, %.0f | Quiz: %.1f)\n"+
+		"Mil Skills: %.1f (PFT: %d, CFT: %d, Rifle: %s, Pistol: %s)\n"+
+		"Leadership: %.1f (Wk12: %.1f, Wk22: %.1f, PeerWk12: %.1f, PeerWk22: %.1f)\n"+
+		"Overall: %.1f | Trend: %s | At-Risk: %v | Flags: %s",
+		st.Rank, st.LastName, st.FirstName, st.ID,
+		st.Company, st.Platoon, st.Phase, st.SPC,
+		st.AcademicComposite, st.Exam1, st.Exam2, st.Exam3, st.Exam4, st.QuizAvg,
+		st.MilSkillsComposite, st.PFTScore, st.CFTScore, st.RifleQual, st.PistolQual,
+		st.LeadershipComposite, st.LeadershipWeek12, st.LeadershipWeek22, st.PeerEvalWeek12, st.PeerEvalWeek22,
+		st.OverallComposite, st.Trend, st.AtRisk, flags)
+}
+
+func (h *Handler) toolLookupSchedule(args map[string]interface{}) string {
+	date, _ := args["date"].(string)
+	scope, _ := args["scope"].(string)
+
+	if date == "" {
+		date = nowET().Format("2006-01-02")
+	}
+	if scope == "" {
+		scope = "day"
+	}
+
+	var events []models.TrainingEvent
+	if scope == "week" {
+		events = h.store.ThisWeekSchedule(date)
+	} else {
+		events = h.store.TodaySchedule(date)
+	}
+
+	if len(events) == 0 {
+		return fmt.Sprintf("No training events found for %s (%s)", date, scope)
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Training schedule for %s (%s) — %d events:\n", date, scope, len(events))
+	for _, e := range events {
+		graded := ""
+		if e.IsGraded {
+			graded = " [GRADED]"
+		}
+		fmt.Fprintf(&b, "- %s %s–%s: %s (%s)%s at %s | Lead: %s\n",
+			e.StartDate, e.StartTime, e.EndTime, e.Title, e.Code, graded, e.Location, e.LeadInstructor)
+	}
+	return b.String()
+}
+
+func (h *Handler) toolWebSearch(args map[string]interface{}) string {
+	query, _ := args["query"].(string)
+	if query == "" {
+		return "No search query provided"
+	}
+
+	// SearXNG instance — sidecar or env-configured URL
+	searxURL := os.Getenv("SEARXNG_URL")
+	if searxURL == "" {
+		searxURL = "http://localhost:8888"
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest("GET", searxURL+"/search", nil)
+	if err != nil {
+		return fmt.Sprintf("Search error: %v", err)
+	}
+
+	q := req.URL.Query()
+	q.Set("q", query)
+	q.Set("format", "json")
+	q.Set("categories", "general")
+	q.Set("language", "en")
+	req.URL.RawQuery = q.Encode()
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Sprintf("Search failed (SearXNG unreachable): %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		return fmt.Sprintf("Search returned %d: %s", resp.StatusCode, string(body[:min(200, len(body))]))
+	}
+
+	var result struct {
+		Results []struct {
+			Title   string `json:"title"`
+			Content string `json:"content"`
+			URL     string `json:"url"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return fmt.Sprintf("Failed to parse search results: %v", err)
+	}
+
+	if len(result.Results) == 0 {
+		return fmt.Sprintf("No results found for '%s'", query)
+	}
+
+	// Cap at 5 results
+	show := 5
+	if show > len(result.Results) {
+		show = len(result.Results)
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Search results for '%s':\n\n", query)
+	for i, r := range result.Results[:show] {
+		fmt.Fprintf(&b, "%d. **%s**\n   %s\n   Source: %s\n\n", i+1, r.Title, r.Content, r.URL)
+	}
+	return b.String()
+}
+
+func (h *Handler) toolLookupExamResults(args map[string]interface{}) string {
+	studentID, _ := args["student_id"].(string)
+	examNumF, _ := args["exam_number"].(float64)
+	examNum := int(examNumF)
+
+	if studentID == "" {
+		return "No student_id provided"
+	}
+	if examNum < 1 || examNum > 4 {
+		return "exam_number must be 1-4"
+	}
+
+	st, ok := h.store.GetStudent(studentID)
+	if !ok {
+		return fmt.Sprintf("Student %s not found", studentID)
+	}
+
+	results := h.store.GetExamResults(studentID, examNum)
+	if results == nil {
+		return fmt.Sprintf("No Exam %d results on file for %s %s", examNum, st.Rank, st.LastName)
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Exam %d Results for %s %s, %s\n", examNum, st.Rank, st.LastName, st.FirstName)
+	fmt.Fprintf(&b, "Score: %.1f%% (%d/%d correct)\n\n", results.Score, results.Correct, results.Total)
+	fmt.Fprintf(&b, "IMPORTANT: Do NOT reveal specific test questions or correct answers to the student.\n")
+	fmt.Fprintf(&b, "Instead, identify topic areas where they struggled and provide study guidance.\n\n")
+
+	// Group by topic
+	topicCorrect := make(map[string]int)
+	topicTotal := make(map[string]int)
+	for _, q := range results.Questions {
+		topicTotal[q.Topic]++
+		if q.Correct {
+			topicCorrect[q.Topic]++
+		}
+	}
+
+	fmt.Fprintf(&b, "Performance by Topic Area:\n")
+	for topic, total := range topicTotal {
+		correct := topicCorrect[topic]
+		pct := float64(correct) / float64(total) * 100
+		status := "STRONG"
+		if pct < 60 {
+			status = "NEEDS WORK"
+		} else if pct < 80 {
+			status = "FAIR"
+		}
+		fmt.Fprintf(&b, "- %s: %d/%d (%.0f%%) — %s\n", topic, correct, total, pct, status)
+	}
+
+	return b.String()
 }
 
 // buildChatContext creates the system prompt and relevant data context for the chat.
@@ -314,7 +703,7 @@ func (h *Handler) buildChatContext(role, company, studentID, message string) (sy
 				if len(s.RiskFlags) > 0 {
 					flags = " — " + strings.Join(s.RiskFlags, ", ")
 				}
-				ctxParts = append(ctxParts, fmt.Sprintf("- %s (%s): Overall %.1f, Trend: %s%s", s.ID, s.Rank, s.OverallComposite, s.Trend, flags))
+				ctxParts = append(ctxParts, fmt.Sprintf("- %s (%s): Overall %.1f, Trend: %s%s", fmt.Sprintf("%s %s, %s", s.Rank, s.LastName, s.FirstName), s.ID, s.OverallComposite, s.Trend, flags))
 			}
 		}
 
@@ -367,7 +756,7 @@ func (h *Handler) buildChatContext(role, company, studentID, message string) (sy
 				if len(s.RiskFlags) > 0 {
 					flags = " — " + strings.Join(s.RiskFlags, ", ")
 				}
-				ctxParts = append(ctxParts, fmt.Sprintf("- %s (%s): Overall %.1f, Trend: %s%s", s.ID, s.Rank, s.OverallComposite, s.Trend, flags))
+				ctxParts = append(ctxParts, fmt.Sprintf("- %s (%s): Overall %.1f, Trend: %s%s", fmt.Sprintf("%s %s, %s", s.Rank, s.LastName, s.FirstName), s.ID, s.OverallComposite, s.Trend, flags))
 			}
 		}
 
@@ -574,7 +963,7 @@ func formatTopAtRisk(students []models.Student, n int) string {
 		if flags == "" {
 			flags = "composite/trend"
 		}
-		fmt.Fprintf(&b, "- **%s** (%s): Overall %.1f, Trend: %s — %s\n", s.ID, s.Rank, s.OverallComposite, s.Trend, flags)
+		fmt.Fprintf(&b, "- **%s** (%s): Overall %.1f, Trend: %s — %s\n", fmt.Sprintf("%s %s, %s", s.Rank, s.LastName, s.FirstName), s.ID, s.OverallComposite, s.Trend, flags)
 	}
 	if len(students) > n {
 		fmt.Fprintf(&b, "- ...and %d more\n", len(students)-n)

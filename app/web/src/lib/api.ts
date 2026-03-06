@@ -5,7 +5,7 @@
 import type {
   Student, StudentStats, QualStats,
   Instructor, TrainingEvent, Qualification, QualRecord,
-  AuthInfo, ChatMessage,
+  AuthInfo, ChatMessage, Task, Message, Notification,
 } from './types'
 
 const STATIC = import.meta.env.MODE === 'static'
@@ -23,9 +23,20 @@ async function get<T>(path: string, params?: Record<string, string>): Promise<T>
   return res.json()
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+async function post<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`)
+  return res.json()
+}
+
+async function patch<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API}${path}`, {
+    method: 'PATCH',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -228,5 +239,40 @@ export const api = {
       return sd.switchAuth(role, company, studentId)
     }
     return post<AuthInfo>('/auth/switch', { role, company, studentId: studentId || '' })
+  },
+
+  // Tasks
+  getTasks: async (params?: Record<string, string>) => {
+    return get<Task[]>('/tasks', params)
+  },
+
+  getTask: async (id: string) => {
+    return get<Task>(`/tasks/${id}`)
+  },
+
+  updateTask: async (id: string, updates: Partial<Pick<Task, 'status' | 'priority' | 'assignedTo'>>) => {
+    return patch<Task>(`/tasks/${id}`, updates)
+  },
+
+  // Messages
+  getMessages: async (params?: Record<string, string>) => {
+    return get<Message[]>('/messages', params)
+  },
+
+  markMessageRead: async (id: string) => {
+    return post<{ status: string }>(`/messages/${id}/read`)
+  },
+
+  // Notifications
+  getNotifications: async (params?: Record<string, string>) => {
+    return get<Notification[]>('/notifications', params)
+  },
+
+  getNotificationCount: async () => {
+    return get<{ count: number }>('/notifications/count')
+  },
+
+  markNotificationRead: async (id: string) => {
+    return post<{ status: string }>(`/notifications/${id}/read`)
   },
 }

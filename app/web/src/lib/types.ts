@@ -162,3 +162,39 @@ export interface AuthInfo {
 }
 
 export type Role = 'xo' | 'staff' | 'spc' | 'student'
+
+export interface Task {
+  id: string
+  title: string
+  description: string
+  assignedTo: string
+  createdBy: string
+  priority: 'high' | 'medium' | 'low'
+  status: 'pending' | 'in_progress' | 'completed'
+  dueDate: string
+  relatedId: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Message {
+  id: string
+  from: string
+  to: string
+  subject: string
+  body: string
+  read: boolean
+  relatedId: string
+  createdAt: string
+}
+
+export interface Notification {
+  id: string
+  userRole: string
+  type: 'task' | 'message' | 'alert'
+  title: string
+  body: string
+  read: boolean
+  actionUrl: string
+  createdAt: string
+}

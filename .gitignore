@@ -14,11 +14,16 @@ desktop.ini
 # Build artifacts
 *.pbix
 *.msapp
+node_modules/
 
 # Sensitive
 credentials/
 *.pem
 *.key
+containerapp-update.yaml
+
+# Demo recorder output (large videos/screenshots)
+demo-recorder/output/
 
 # Claude/Serena
 .claude/

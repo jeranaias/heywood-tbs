@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
-import { Menu, ChevronDown, User, Shield, Users, Crown } from 'lucide-react'
+import { Menu, ChevronDown, User, Shield, Users, Crown, Bell } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
+import { api } from '../../lib/api'
 import type { Role } from '../../lib/types'
 
 interface HeaderProps {
@@ -16,7 +18,9 @@ const roles: { value: Role; label: string; desc: string; icon: typeof User }[] =
 
 export function Header({ onMenuClick }: HeaderProps) {
   const { auth, switchRole } = useAuth()
+  const navigate = useNavigate()
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [notifCount, setNotifCount] = useState(0)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -28,6 +32,19 @@ export function Header({ onMenuClick }: HeaderProps) {
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
+  // Poll notification count every 30 seconds
+  useEffect(() => {
+    const fetchCount = async () => {
+      try {
+        const { count } = await api.getNotificationCount()
+        setNotifCount(count)
+      } catch { /* ignore */ }
+    }
+    fetchCount()
+    const interval = setInterval(fetchCount, 30000)
+    return () => clearInterval(interval)
+  }, [auth.role])
 
   const currentRole = roles.find(r => r.value === auth.role) || roles[0]
 
@@ -41,6 +58,22 @@ export function Header({ onMenuClick }: HeaderProps) {
       </button>
 
       <div className="flex-1" />
+
+      {/* Notification Bell */}
+      {(auth.role === 'xo' || auth.role === 'staff' || auth.role === 'spc') && (
+        <button
+          onClick={() => navigate('/tasks')}
+          className="relative p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+          title="Task inbox"
+        >
+          <Bell className="w-5 h-5" />
+          {notifCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center w-5 h-5 text-[10px] font-bold bg-[var(--color-scarlet)] text-white rounded-full">
+              {notifCount > 9 ? '9+' : notifCount}
+            </span>
+          )}
+        </button>
+      )}
 
       {/* Role Switcher */}
       <div className="relative" ref={dropdownRef}>

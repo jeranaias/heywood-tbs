@@ -10,27 +10,30 @@ import (
 )
 
 func (h *Handler) handleAuthMe(w http.ResponseWriter, r *http.Request) {
-	role := middleware.GetRole(r.Context())
-	company := middleware.GetCompany(r.Context())
+	identity := middleware.GetIdentity(r.Context())
 	studentID := middleware.GetStudentID(r.Context())
 
-	name := "TBS Staff"
-	switch role {
-	case "xo":
-		name = "Executive Officer"
-	case "spc":
-		name = "Staff Platoon Commander"
-	case "student":
-		if st, ok := h.store.GetStudent(studentID); ok {
-			name = st.Rank + " " + st.LastName
-		} else {
-			name = "Student"
+	name := identity.Name
+	if name == "" {
+		switch identity.Role {
+		case "xo":
+			name = "Executive Officer"
+		case "spc":
+			name = "Staff Platoon Commander"
+		case "student":
+			if st, ok := h.store.GetStudent(studentID); ok {
+				name = st.Rank + " " + st.LastName
+			} else {
+				name = "Student"
+			}
+		default:
+			name = "TBS Staff"
 		}
 	}
 
 	writeJSON(w, 200, models.AuthInfo{
-		Role:      role,
-		Company:   company,
+		Role:      identity.Role,
+		Company:   identity.Company,
 		StudentID: studentID,
 		Name:      name,
 	})
@@ -43,6 +46,12 @@ type switchRequest struct {
 }
 
 func (h *Handler) handleAuthSwitch(w http.ResponseWriter, r *http.Request) {
+	// Block role switching in CAC mode
+	if !h.authProvider.SupportsSwitch() {
+		writeError(w, 403, "role switching is not available in CAC authentication mode")
+		return
+	}
+
 	var req switchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, 400, "invalid request body")

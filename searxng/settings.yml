@@ -1,0 +1,14 @@
+use_default_settings: true
+
+server:
+  secret_key: "heywood-tbs-searxng-2026"
+  bind_address: "0.0.0.0"
+  port: 8888
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "en"
+  formats:
+    - html
+    - json

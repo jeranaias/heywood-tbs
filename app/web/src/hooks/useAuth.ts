@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import type { AuthInfo, Role } from '../lib/types'
 import { api } from '../lib/api'
 
@@ -24,7 +24,15 @@ export function useAuthProvider() {
     company: '',
     name: 'TBS Staff',
   })
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  // Hydrate auth state from server cookie on mount
+  useEffect(() => {
+    api.getAuthMe()
+      .then(info => setAuth(info))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
 
   const switchRole = useCallback(async (role: Role, studentId?: string) => {
     setLoading(true)

@@ -201,6 +201,23 @@ type XOScheduleItem struct {
 	Notes     string   `json:"notes"`
 }
 
+// ExamResult holds a student's detailed results for a specific exam.
+type ExamResult struct {
+	StudentID string             `json:"studentId"`
+	ExamNum   int                `json:"examNum"`
+	Score     float64            `json:"score"`
+	Correct   int                `json:"correct"`
+	Total     int                `json:"total"`
+	Questions []ExamQuestionResult `json:"questions"`
+}
+
+// ExamQuestionResult is a student's result on a single exam question.
+type ExamQuestionResult struct {
+	QuestionNum int    `json:"questionNum"`
+	Topic       string `json:"topic"`
+	Correct     bool   `json:"correct"`
+}
+
 // ChatRequest is the request body for the chat endpoint.
 type ChatRequest struct {
 	Message string        `json:"message"`
@@ -225,4 +242,43 @@ type AuthInfo struct {
 	Company   string `json:"company"`
 	StudentID string `json:"studentId,omitempty"`
 	Name      string `json:"name"`
+}
+
+// Task represents an actionable task created by Heywood or a user.
+type Task struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	AssignedTo  string `json:"assignedTo"`  // role or instructor ID
+	CreatedBy   string `json:"createdBy"`   // "heywood" or role
+	Priority    string `json:"priority"`    // "high", "medium", "low"
+	Status      string `json:"status"`      // "pending", "in_progress", "completed"
+	DueDate     string `json:"dueDate"`     // YYYY-MM-DD
+	RelatedID   string `json:"relatedId"`   // e.g. "STU-042"
+	CreatedAt   string `json:"createdAt"`
+	UpdatedAt   string `json:"updatedAt"`
+}
+
+// Message represents an internal message brokered by Heywood.
+type Message struct {
+	ID        string `json:"id"`
+	From      string `json:"from"`      // "heywood", role, or user ID
+	To        string `json:"to"`        // role or user ID
+	Subject   string `json:"subject"`
+	Body      string `json:"body"`
+	Read      bool   `json:"read"`
+	RelatedID string `json:"relatedId"` // task ID or student ID
+	CreatedAt string `json:"createdAt"`
+}
+
+// Notification represents a notification for a user role.
+type Notification struct {
+	ID        string `json:"id"`
+	UserRole  string `json:"userRole"`  // target role
+	Type      string `json:"type"`      // "task", "message", "alert"
+	Title     string `json:"title"`
+	Body      string `json:"body"`
+	Read      bool   `json:"read"`
+	ActionURL string `json:"actionUrl"` // e.g. "/tasks/TSK-001"
+	CreatedAt string `json:"createdAt"`
 }

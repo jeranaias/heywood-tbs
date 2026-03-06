@@ -5,9 +5,11 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"heywood-tbs/internal/ai"
 	"heywood-tbs/internal/api"
+	"heywood-tbs/internal/auth"
 	"heywood-tbs/internal/data"
 	"heywood-tbs/internal/middleware"
 )
@@ -44,8 +46,21 @@ func main() {
 	newsSvc := &ai.NewsService{}
 	trafficSvc := &ai.TrafficService{}
 
+	// Select auth provider based on AUTH_MODE env var
+	var authProvider auth.IdentityProvider
+	authMode := os.Getenv("AUTH_MODE")
+	switch authMode {
+	case "cac":
+		rosterPath := filepath.Join(*dataDir, "user-roster.json")
+		authProvider = auth.NewCACProvider(rosterPath)
+		slog.Info("auth mode: CAC/PKI")
+	default:
+		authProvider = &auth.DemoProvider{}
+		slog.Info("auth mode: Demo (role picker)")
+	}
+
 	// Build handler and router
-	handler := api.NewHandler(store, chatSvc, weatherSvc, newsSvc, trafficSvc, *dev)
+	handler := api.NewHandler(store, chatSvc, weatherSvc, newsSvc, trafficSvc, authProvider, *dev)
 	mux := api.SetupRouter(handler)
 
 	// Serve static files in production (embedded SPA)
@@ -64,7 +79,7 @@ func main() {
 	chain := middleware.Chain(
 		middleware.SecurityHeaders,
 		middleware.CORS(*dev),
-		middleware.Auth,
+		middleware.AuthWithProvider(authProvider),
 	)
 
 	addr := ":" + *port

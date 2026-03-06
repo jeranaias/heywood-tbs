@@ -20,7 +20,7 @@ func MockGreeting(role string, stats models.StudentStats) string {
 	case "spc":
 		return fmt.Sprintf("Good morning, sir/ma'am. I'm Heywood, here to help you manage your students.\n\n"+
 			"Your company currently has %d students with an average composite of %.1f. "+
-			"%d are flagged at-risk.\n\n"+
+			"%d (%.1f%%) are flagged at-risk.\n\n"+
 			"I can help with counseling prep, performance tracking, AAR analysis, or scenario generation. What do you need?",
 			stats.ActiveStudents, stats.AvgComposite,
 			stats.AtRiskCount, stats.AtRiskPercent)

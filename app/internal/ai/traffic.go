@@ -107,8 +107,8 @@ func (t *TrafficService) CalculateRoutes(appointments []models.XOScheduleItem, w
 			ri.Conditions = strings.Join(conditions, "; ")
 		}
 
-		// Calculate recommended departure time
-		ri.DepartBy = subtractMinutes(appt.StartTime, totalMins)
+		// Calculate NLT departure time (round down to nearest 5 min for conservatism)
+		ri.DepartBy = subtractMinutesNLT(appt.StartTime, totalMins)
 
 		routes = append(routes, ri)
 	}
@@ -177,20 +177,21 @@ func parseHour(hhmm string) int {
 	return h
 }
 
-func subtractMinutes(hhmm string, mins int) string {
+// subtractMinutesNLT subtracts minutes and rounds DOWN to the nearest 5-min mark.
+func subtractMinutesNLT(hhmm string, mins int) string {
 	if len(hhmm) < 4 {
 		return hhmm
 	}
 	h := parseHour(hhmm)
-	m := 0
-	if len(hhmm) >= 4 {
-		m = int(hhmm[2]-'0')*10 + int(hhmm[3]-'0')
-	}
+	m := int(hhmm[2]-'0')*10 + int(hhmm[3]-'0')
 
 	totalMins := h*60 + m - mins
 	if totalMins < 0 {
 		totalMins += 24 * 60
 	}
+
+	// Round down to nearest 5 minutes (more conservative)
+	totalMins = (totalMins / 5) * 5
 
 	return fmt.Sprintf("%02d%02d", totalMins/60, totalMins%60)
 }
@@ -208,7 +209,7 @@ func FormatTrafficForPrompt(routes []RouteInfo) string {
 		fmt.Fprintf(&b, "  Location: %s\n", r.Appointment.Location)
 		fmt.Fprintf(&b, "  Distance: %.1f miles | Base travel: %d min | Est. with conditions: %d min\n",
 			r.DistanceMiles, r.BaseTravelMins, r.EstTravelMins)
-		fmt.Fprintf(&b, "  Recommended departure: %s\n", r.DepartBy)
+		fmt.Fprintf(&b, "  Depart NLT: %s\n", r.DepartBy)
 		fmt.Fprintf(&b, "  Conditions: %s\n", r.Conditions)
 	}
 	return b.String()

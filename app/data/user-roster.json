@@ -1,0 +1,23 @@
+[
+  {
+    "edipi": "1234567890",
+    "name": "Smith, John",
+    "role": "xo",
+    "company": "",
+    "email": "john.smith@usmc.mil"
+  },
+  {
+    "edipi": "2345678901",
+    "name": "Jones, Michael",
+    "role": "staff",
+    "company": "",
+    "email": "michael.jones@usmc.mil"
+  },
+  {
+    "edipi": "3456789012",
+    "name": "Williams, Robert",
+    "role": "spc",
+    "company": "alpha",
+    "email": "robert.williams@usmc.mil"
+  }
+]

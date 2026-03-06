@@ -31,10 +31,10 @@ RUN apk add --no-cache ca-certificates tzdata \
     && adduser -D -u 1000 heywood
 WORKDIR /app
 
-# Copy artifacts
+# Copy artifacts (chown data/ to heywood user for write-through persistence)
 COPY --from=go-builder /build/heywood .
 COPY --from=web-builder /build/web/dist web/dist/
-COPY data/ data/
+COPY --chown=heywood:heywood data/ data/
 
 # Run as non-root (STIG requirement)
 USER heywood

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"heywood-tbs/internal/models"
@@ -25,8 +26,20 @@ type Store struct {
 	Feedback       []models.EventFeedback
 	XOSchedule     []models.XOScheduleItem
 
+	// Exam results (immutable reference data)
+	ExamResults []models.ExamResult
+
+	// Mutable data (tasks, messages, notifications)
+	Tasks         []models.Task
+	Messages      []models.Message
+	Notifications []models.Notification
+
 	studentByID    map[string]*models.Student
 	instructorByID map[string]*models.Instructor
+
+	mu      sync.RWMutex // guards mutable data
+	dataDir string       // for write-through persistence
+	nextID  int          // auto-increment counter for IDs
 }
 
 // NewStore loads all JSON data files from dataDir into memory.
@@ -34,6 +47,8 @@ func NewStore(dataDir string) (*Store, error) {
 	s := &Store{
 		studentByID:    make(map[string]*models.Student),
 		instructorByID: make(map[string]*models.Instructor),
+		dataDir:        dataDir,
+		nextID:         1,
 	}
 
 	if err := loadJSON(filepath.Join(dataDir, "students.json"), &s.Students); err != nil {
@@ -56,6 +71,31 @@ func NewStore(dataDir string) (*Store, error) {
 	}
 	// XO schedule is optional — not an error if missing
 	_ = loadJSON(filepath.Join(dataDir, "xo-schedule.json"), &s.XOSchedule)
+
+	// Exam results — optional
+	_ = loadJSON(filepath.Join(dataDir, "exam-results.json"), &s.ExamResults)
+
+	// Mutable data — optional, not an error if missing
+	_ = loadJSON(filepath.Join(dataDir, "tasks.json"), &s.Tasks)
+	_ = loadJSON(filepath.Join(dataDir, "messages.json"), &s.Messages)
+	_ = loadJSON(filepath.Join(dataDir, "notifications.json"), &s.Notifications)
+
+	// Set nextID based on existing mutable data
+	for _, t := range s.Tasks {
+		if n := parseIDNum(t.ID); n >= s.nextID {
+			s.nextID = n + 1
+		}
+	}
+	for _, m := range s.Messages {
+		if n := parseIDNum(m.ID); n >= s.nextID {
+			s.nextID = n + 1
+		}
+	}
+	for _, n := range s.Notifications {
+		if num := parseIDNum(n.ID); num >= s.nextID {
+			s.nextID = num + 1
+		}
+	}
 
 	// Build indexes
 	for i := range s.Students {
@@ -313,6 +353,16 @@ func (s *Store) TotalStudentCount() int {
 	return len(s.Students)
 }
 
+// GetExamResults returns a student's results for a specific exam, or nil if not found.
+func (s *Store) GetExamResults(studentID string, examNum int) *models.ExamResult {
+	for i := range s.ExamResults {
+		if s.ExamResults[i].StudentID == studentID && s.ExamResults[i].ExamNum == examNum {
+			return &s.ExamResults[i]
+		}
+	}
+	return nil
+}
+
 // XOScheduleForDate returns XO schedule items for a given date.
 func (s *Store) XOScheduleForDate(date string) []models.XOScheduleItem {
 	var result []models.XOScheduleItem
@@ -325,4 +375,205 @@ func (s *Store) XOScheduleForDate(date string) []models.XOScheduleItem {
 		return result[i].StartTime < result[j].StartTime
 	})
 	return result
+}
+
+// --- Task operations ---
+
+func (s *Store) CreateTask(task models.Task) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if task.ID == "" {
+		task.ID = fmt.Sprintf("TSK-%03d", s.nextID)
+		s.nextID++
+	}
+	now := time.Now().Format(time.RFC3339)
+	if task.CreatedAt == "" {
+		task.CreatedAt = now
+	}
+	task.UpdatedAt = now
+	if task.Status == "" {
+		task.Status = "pending"
+	}
+	s.Tasks = append(s.Tasks, task)
+	return s.persistJSON("tasks.json", s.Tasks)
+}
+
+func (s *Store) ListTasks(assignedTo string) []models.Task {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if assignedTo == "" {
+		result := make([]models.Task, len(s.Tasks))
+		copy(result, s.Tasks)
+		return result
+	}
+	var result []models.Task
+	for _, t := range s.Tasks {
+		if strings.EqualFold(t.AssignedTo, assignedTo) {
+			result = append(result, t)
+		}
+	}
+	return result
+}
+
+func (s *Store) GetTask(id string) (*models.Task, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for i := range s.Tasks {
+		if s.Tasks[i].ID == id {
+			return &s.Tasks[i], true
+		}
+	}
+	return nil, false
+}
+
+func (s *Store) UpdateTask(id string, updates map[string]interface{}) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.Tasks {
+		if s.Tasks[i].ID == id {
+			if v, ok := updates["status"].(string); ok {
+				s.Tasks[i].Status = v
+			}
+			if v, ok := updates["priority"].(string); ok {
+				s.Tasks[i].Priority = v
+			}
+			if v, ok := updates["assignedTo"].(string); ok {
+				s.Tasks[i].AssignedTo = v
+			}
+			s.Tasks[i].UpdatedAt = time.Now().Format(time.RFC3339)
+			return s.persistJSON("tasks.json", s.Tasks)
+		}
+	}
+	return fmt.Errorf("task %s not found", id)
+}
+
+// --- Message operations ---
+
+func (s *Store) CreateMessage(msg models.Message) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if msg.ID == "" {
+		msg.ID = fmt.Sprintf("MSG-%03d", s.nextID)
+		s.nextID++
+	}
+	if msg.CreatedAt == "" {
+		msg.CreatedAt = time.Now().Format(time.RFC3339)
+	}
+	s.Messages = append(s.Messages, msg)
+	return s.persistJSON("messages.json", s.Messages)
+}
+
+func (s *Store) ListMessages(userRole string) []models.Message {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if userRole == "" {
+		result := make([]models.Message, len(s.Messages))
+		copy(result, s.Messages)
+		return result
+	}
+	var result []models.Message
+	for _, m := range s.Messages {
+		if strings.EqualFold(m.To, userRole) {
+			result = append(result, m)
+		}
+	}
+	return result
+}
+
+func (s *Store) MarkMessageRead(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.Messages {
+		if s.Messages[i].ID == id {
+			s.Messages[i].Read = true
+			return s.persistJSON("messages.json", s.Messages)
+		}
+	}
+	return fmt.Errorf("message %s not found", id)
+}
+
+// --- Notification operations ---
+
+func (s *Store) CreateNotification(n models.Notification) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if n.ID == "" {
+		n.ID = fmt.Sprintf("NTF-%03d", s.nextID)
+		s.nextID++
+	}
+	if n.CreatedAt == "" {
+		n.CreatedAt = time.Now().Format(time.RFC3339)
+	}
+	s.Notifications = append(s.Notifications, n)
+	return s.persistJSON("notifications.json", s.Notifications)
+}
+
+func (s *Store) ListNotifications(userRole string, unreadOnly bool) []models.Notification {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var result []models.Notification
+	for _, n := range s.Notifications {
+		if userRole != "" && !strings.EqualFold(n.UserRole, userRole) {
+			continue
+		}
+		if unreadOnly && n.Read {
+			continue
+		}
+		result = append(result, n)
+	}
+	// Reverse order — newest first
+	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
+		result[i], result[j] = result[j], result[i]
+	}
+	return result
+}
+
+func (s *Store) MarkNotificationRead(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.Notifications {
+		if s.Notifications[i].ID == id {
+			s.Notifications[i].Read = true
+			return s.persistJSON("notifications.json", s.Notifications)
+		}
+	}
+	return fmt.Errorf("notification %s not found", id)
+}
+
+func (s *Store) UnreadNotificationCount(userRole string) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	count := 0
+	for _, n := range s.Notifications {
+		if !n.Read && (userRole == "" || strings.EqualFold(n.UserRole, userRole)) {
+			count++
+		}
+	}
+	return count
+}
+
+// --- Helpers ---
+
+func (s *Store) persistJSON(filename string, data interface{}) error {
+	path := filepath.Join(s.dataDir, filename)
+	b, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, b, 0644)
+}
+
+func parseIDNum(id string) int {
+	// Extract numeric suffix from IDs like "TSK-001", "MSG-042", "NTF-007"
+	idx := strings.LastIndex(id, "-")
+	if idx < 0 || idx+1 >= len(id) {
+		return 0
+	}
+	n := 0
+	for _, c := range id[idx+1:] {
+		if c >= '0' && c <= '9' {
+			n = n*10 + int(c-'0')
+		}
+	}
+	return n
 }

@@ -11,6 +11,7 @@ import { ChatPage } from './pages/ChatPage'
 import { InstructorQuals } from './pages/InstructorQuals'
 import { Schedule } from './pages/Schedule'
 import { MyRecord } from './pages/MyRecord'
+import { TasksPage } from './pages/TasksPage'
 
 function App() {
   const authProvider = useAuthProvider()
@@ -27,6 +28,7 @@ function App() {
             <Route path="/at-risk" element={<AtRisk />} />
             <Route path="/instructor-quals" element={<InstructorQuals />} />
             <Route path="/schedule" element={<Schedule />} />
+            <Route path="/tasks" element={<TasksPage />} />
             <Route path="/my-record" element={<MyRecord />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
