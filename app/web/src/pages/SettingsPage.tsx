@@ -8,7 +8,7 @@ import {
 import { api } from '../lib/api'
 import type { AppSettings, SystemInfo } from '../lib/types'
 
-type DataSourceType = 'json' | 'excel' | 'sharepoint' | 'cosmos' | 'postgres' | 'sqlserver'
+type DataSourceType = 'json' | 'excel' | 'sqlite' | 'postgres' | 'sharepoint' | 'cosmos'
 
 export function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null)
@@ -66,7 +66,7 @@ export function SettingsPage() {
         params.clientId = settings.dataSource.sharepoint.clientId
         params.clientSecret = settings.dataSource.sharepoint.clientSecret
         params.siteUrl = settings.dataSource.sharepoint.siteUrl
-      } else if (['cosmos', 'postgres', 'sqlserver'].includes(settings.dataSource.type)) {
+      } else if (['sqlite', 'postgres', 'cosmos'].includes(settings.dataSource.type)) {
         params.connectionString = settings.dataSource.database.connectionString
       }
       const result = await api.testConnection(params)
@@ -286,26 +286,76 @@ export function SettingsPage() {
           {showAdvancedData && (
             <div className="mt-3 space-y-3 pl-4 border-l-2 border-slate-200">
               <p className="text-xs text-slate-500">
-                These options are for units with IT support that want live data sync. Most units should use Excel upload instead.
+                These options store Heywood's data (tasks, messages, chat history) in a real database with per-user isolation.
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <DataSourceCard
+                  icon={Database}
+                  title="SQLite"
+                  desc="Single-file database — no server needed"
+                  selected={settings.dataSource.type === 'sqlite'}
+                  onClick={() => updateDataSourceType('sqlite')}
+                  small
+                  recommended
+                />
+                <DataSourceCard
+                  icon={Server}
+                  title="PostgreSQL"
+                  desc="Production-grade, MCEN compatible"
+                  selected={settings.dataSource.type === 'postgres'}
+                  onClick={() => updateDataSourceType('postgres')}
+                  small
+                />
                 <DataSourceCard
                   icon={Cloud}
-                  title="SharePoint Lists"
-                  desc="Connect to your unit's SharePoint site"
+                  title="SharePoint"
+                  desc="Connect to SharePoint lists"
                   selected={settings.dataSource.type === 'sharepoint'}
                   onClick={() => updateDataSourceType('sharepoint')}
                   small
                 />
-                <DataSourceCard
-                  icon={Database}
-                  title="Database"
-                  desc="Cosmos DB, PostgreSQL, or SQL Server"
-                  selected={['cosmos', 'postgres', 'sqlserver'].includes(settings.dataSource.type)}
-                  onClick={() => updateDataSourceType('postgres')}
-                  small
-                />
               </div>
+
+              {/* SQLite config */}
+              {settings.dataSource.type === 'sqlite' && (
+                <div className="space-y-3 bg-slate-50 p-4 rounded-lg">
+                  <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">
+                    <CheckCircle2 className="w-4 h-4" />
+                    SQLite requires no setup — data is stored in a file on the server. Great for single-server deployments.
+                  </div>
+                  <SettingsInput
+                    label="Database File Path"
+                    value={settings.dataSource.database.connectionString}
+                    onChange={v => setSettings({
+                      ...settings,
+                      dataSource: { ...settings.dataSource, database: { ...settings.dataSource.database, type: 'sqlite', connectionString: v } },
+                    })}
+                    placeholder="data/heywood.db (default)"
+                    help="Leave blank to use the default location. The file is created automatically."
+                  />
+                </div>
+              )}
+
+              {/* PostgreSQL config */}
+              {settings.dataSource.type === 'postgres' && (
+                <div className="space-y-3 bg-slate-50 p-4 rounded-lg">
+                  <p className="text-xs text-slate-600">
+                    Enter your PostgreSQL connection string. Available on Azure as "Azure Database for PostgreSQL".
+                    Your DBA or cloud team can provide this.
+                  </p>
+                  <SettingsInput
+                    label="Connection String"
+                    value={settings.dataSource.database.connectionString}
+                    onChange={v => setSettings({
+                      ...settings,
+                      dataSource: { ...settings.dataSource, database: { ...settings.dataSource.database, type: 'postgres', connectionString: v } },
+                    })}
+                    type="password"
+                    placeholder="postgres://user:password@host:5432/heywood?sslmode=require"
+                    help="Full PostgreSQL connection URL. Credentials are encrypted at rest."
+                  />
+                </div>
+              )}
 
               {/* SharePoint config */}
               {settings.dataSource.type === 'sharepoint' && (
@@ -371,40 +421,6 @@ export function SettingsPage() {
                 </div>
               )}
 
-              {/* Database config */}
-              {['cosmos', 'postgres', 'sqlserver'].includes(settings.dataSource.type) && (
-                <div className="space-y-3 bg-slate-50 p-4 rounded-lg">
-                  <p className="text-xs text-slate-600">
-                    Your database admin or cloud team can provide the connection string.
-                  </p>
-                  <div>
-                    <label className="text-xs text-slate-500 mb-1 block">Database Type</label>
-                    <select
-                      value={settings.dataSource.database.type || settings.dataSource.type}
-                      onChange={e => setSettings({
-                        ...settings,
-                        dataSource: { ...settings.dataSource, type: e.target.value as DataSourceType, database: { ...settings.dataSource.database, type: e.target.value } },
-                      })}
-                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm w-full"
-                    >
-                      <option value="cosmos">Azure Cosmos DB</option>
-                      <option value="postgres">PostgreSQL</option>
-                      <option value="sqlserver">Azure SQL / SQL Server</option>
-                    </select>
-                  </div>
-                  <SettingsInput
-                    label="Connection String"
-                    value={settings.dataSource.database.connectionString}
-                    onChange={v => setSettings({
-                      ...settings,
-                      dataSource: { ...settings.dataSource, database: { ...settings.dataSource.database, connectionString: v } },
-                    })}
-                    type="password"
-                    help="The full connection string from your database provider"
-                  />
-                </div>
-              )}
-
               {/* Test Connection */}
               {settings.dataSource.type !== 'json' && settings.dataSource.type !== 'excel' && (
                 <div className="flex items-center gap-3">
@@ -417,7 +433,7 @@ export function SettingsPage() {
                     Test Connection
                   </button>
                   {testResult && (
-                    <div className={`flex items-center gap-1.5 text-sm ${testResult.status === 'ok' ? 'text-green-600' : 'text-red-600'}`}>
+                    <div className={`flex items-center gap-1.5 text-sm ${testResult.status === 'ok' ? 'text-green-600' : testResult.status === 'pending' ? 'text-yellow-600' : 'text-red-600'}`}>
                       {testResult.status === 'ok' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
                       {testResult.message}
                     </div>

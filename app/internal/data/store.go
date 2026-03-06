@@ -3,6 +3,7 @@ package data
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -37,18 +38,24 @@ type Store struct {
 	studentByID    map[string]*models.Student
 	instructorByID map[string]*models.Instructor
 
-	mu      sync.RWMutex // guards mutable data
-	dataDir string       // for write-through persistence
-	nextID  int          // auto-increment counter for IDs
+	mu       sync.RWMutex // guards mutable data
+	dataDir  string       // for write-through persistence
+	nextID   int          // auto-increment counter for IDs
+	demoMode bool         // when true, mutable data is in-memory only (no disk writes)
 }
 
 // NewStore loads all JSON data files from dataDir into memory.
+// In demo mode, mutable data (tasks, messages, notifications) starts empty
+// and is never written to disk — each restart is a fresh slate.
 func NewStore(dataDir string) (*Store, error) {
+	demoMode := os.Getenv("AUTH_MODE") != "cac"
+
 	s := &Store{
 		studentByID:    make(map[string]*models.Student),
 		instructorByID: make(map[string]*models.Instructor),
 		dataDir:        dataDir,
 		nextID:         1,
+		demoMode:       demoMode,
 	}
 
 	if err := loadJSON(filepath.Join(dataDir, "students.json"), &s.Students); err != nil {
@@ -75,25 +82,30 @@ func NewStore(dataDir string) (*Store, error) {
 	// Exam results — optional
 	_ = loadJSON(filepath.Join(dataDir, "exam-results.json"), &s.ExamResults)
 
-	// Mutable data — optional, not an error if missing
-	_ = loadJSON(filepath.Join(dataDir, "tasks.json"), &s.Tasks)
-	_ = loadJSON(filepath.Join(dataDir, "messages.json"), &s.Messages)
-	_ = loadJSON(filepath.Join(dataDir, "notifications.json"), &s.Notifications)
+	if demoMode {
+		// Demo mode: start fresh — no loading, no disk writes
+		slog.Info("demo mode: mutable data is in-memory only (tasks, messages, notifications reset on restart)")
+	} else {
+		// Production mode: load persisted mutable data from disk
+		_ = loadJSON(filepath.Join(dataDir, "tasks.json"), &s.Tasks)
+		_ = loadJSON(filepath.Join(dataDir, "messages.json"), &s.Messages)
+		_ = loadJSON(filepath.Join(dataDir, "notifications.json"), &s.Notifications)
 
-	// Set nextID based on existing mutable data
-	for _, t := range s.Tasks {
-		if n := parseIDNum(t.ID); n >= s.nextID {
-			s.nextID = n + 1
+		// Set nextID based on existing mutable data
+		for _, t := range s.Tasks {
+			if n := parseIDNum(t.ID); n >= s.nextID {
+				s.nextID = n + 1
+			}
 		}
-	}
-	for _, m := range s.Messages {
-		if n := parseIDNum(m.ID); n >= s.nextID {
-			s.nextID = n + 1
+		for _, m := range s.Messages {
+			if n := parseIDNum(m.ID); n >= s.nextID {
+				s.nextID = n + 1
+			}
 		}
-	}
-	for _, n := range s.Notifications {
-		if num := parseIDNum(n.ID); num >= s.nextID {
-			s.nextID = num + 1
+		for _, n := range s.Notifications {
+			if num := parseIDNum(n.ID); num >= s.nextID {
+				s.nextID = num + 1
+			}
 		}
 	}
 
@@ -555,6 +567,9 @@ func (s *Store) UnreadNotificationCount(userRole string) int {
 // --- Helpers ---
 
 func (s *Store) persistJSON(filename string, data interface{}) error {
+	if s.demoMode {
+		return nil // demo mode: in-memory only, no disk writes
+	}
 	path := filepath.Join(s.dataDir, filename)
 	b, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {

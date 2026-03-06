@@ -22,7 +22,7 @@ type AppSettings struct {
 }
 
 type DataSourceSettings struct {
-	Type       string              `json:"type"` // "json", "excel", "sharepoint", "cosmos", "postgres", "sqlserver"
+	Type       string              `json:"type"` // "json", "excel", "sqlite", "postgres", "sharepoint", "cosmos"
 	JSONDir    string              `json:"jsonDir"`
 	ExcelPath  string              `json:"excelPath"`
 	SharePoint SharePointSettings  `json:"sharepoint"`
@@ -38,7 +38,7 @@ type SharePointSettings struct {
 }
 
 type DatabaseSettings struct {
-	Type             string `json:"type"` // "cosmos", "postgres", "sqlserver"
+	Type             string `json:"type"` // "sqlite", "postgres"
 	ConnectionString string `json:"connectionString"`
 }
 
@@ -202,22 +202,42 @@ func (h *Handler) handleTestConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For now, return a simulated result based on type
 	switch req.Type {
 	case "json":
 		writeJSON(w, 200, map[string]interface{}{"status": "ok", "message": "JSON data directory is accessible"})
+
+	case "sqlite":
+		dsn := req.ConnectionString
+		if dsn == "" {
+			dsn = filepath.Join(filepath.Dir(settingsPath), "heywood.db")
+		}
+		if err := data.TestConnection("sqlite", dsn); err != nil {
+			writeJSON(w, 200, map[string]interface{}{"status": "error", "message": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]interface{}{"status": "ok", "message": "SQLite connection successful"})
+
+	case "postgres":
+		if req.ConnectionString == "" {
+			writeJSON(w, 200, map[string]interface{}{"status": "error", "message": "Connection string is required (e.g. postgres://user:pass@host:5432/heywood)"})
+			return
+		}
+		if err := data.TestConnection("postgres", req.ConnectionString); err != nil {
+			writeJSON(w, 200, map[string]interface{}{"status": "error", "message": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]interface{}{"status": "ok", "message": "PostgreSQL connection successful"})
+
 	case "sharepoint":
 		if req.TenantID == "" || req.ClientID == "" {
 			writeJSON(w, 200, map[string]interface{}{"status": "error", "message": "Tenant ID and Client ID are required"})
 			return
 		}
-		writeJSON(w, 200, map[string]interface{}{"status": "pending", "message": "SharePoint connector not yet configured — will be available after connector setup"})
-	case "cosmos", "postgres", "sqlserver":
-		if req.ConnectionString == "" {
-			writeJSON(w, 200, map[string]interface{}{"status": "error", "message": "Connection string is required"})
-			return
-		}
-		writeJSON(w, 200, map[string]interface{}{"status": "pending", "message": "Database connector not yet configured — will be available after connector setup"})
+		writeJSON(w, 200, map[string]interface{}{"status": "pending", "message": "SharePoint connector coming soon"})
+
+	case "cosmos":
+		writeJSON(w, 200, map[string]interface{}{"status": "pending", "message": "Cosmos DB connector coming soon"})
+
 	default:
 		writeJSON(w, 200, map[string]interface{}{"status": "error", "message": "Unknown data source type"})
 	}
