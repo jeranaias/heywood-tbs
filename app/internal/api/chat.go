@@ -1,12 +1,15 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
+	"time"
 
 	"heywood-tbs/internal/ai"
 	"heywood-tbs/internal/middleware"
@@ -15,18 +18,50 @@ import (
 	openai "github.com/sashabaranov/go-openai"
 )
 
-// ChatService manages OpenAI API interactions.
+// ChatService manages OpenAI/Azure OpenAI API interactions.
 type ChatService struct {
-	client *openai.Client
+	client     *openai.Client
+	model      string // "gpt-4o" or Azure deployment name
+	isAzure    bool
 }
 
-// NewChatService creates a chat service. If apiKey is empty, returns nil (mock mode).
-func NewChatService(apiKey string) *ChatService {
-	if apiKey == "" {
-		return nil
+// NewChatService creates a chat service with automatic Azure/OpenAI detection.
+//
+// Env vars checked:
+//   - AZURE_OPENAI_ENDPOINT + OPENAI_API_KEY → Azure OpenAI
+//   - OPENAI_API_KEY alone → Public OpenAI
+//   - Neither → nil (mock mode)
+func NewChatService() *ChatService {
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	azureEndpoint := os.Getenv("AZURE_OPENAI_ENDPOINT")
+	azureDeployment := os.Getenv("AZURE_OPENAI_DEPLOYMENT")
+
+	if azureEndpoint != "" && apiKey != "" {
+		// Azure OpenAI (IL5-ready path)
+		config := openai.DefaultAzureConfig(apiKey, azureEndpoint)
+		config.APIVersion = "2024-12-01-preview"
+		model := "gpt-4o"
+		if azureDeployment != "" {
+			model = azureDeployment
+		}
+		slog.Info("Azure OpenAI configured", "endpoint", azureEndpoint, "deployment", model)
+		return &ChatService{
+			client:  openai.NewClientWithConfig(config),
+			model:   model,
+			isAzure: true,
+		}
 	}
-	client := openai.NewClient(apiKey)
-	return &ChatService{client: client}
+
+	if apiKey != "" {
+		// Public OpenAI
+		slog.Info("OpenAI configured (public API)")
+		return &ChatService{
+			client: openai.NewClient(apiKey),
+			model:  string(openai.GPT4o),
+		}
+	}
+
+	return nil // mock mode
 }
 
 func (h *Handler) handleChat(w http.ResponseWriter, r *http.Request) {
@@ -60,7 +95,7 @@ func (h *Handler) handleChat(w http.ResponseWriter, r *http.Request) {
 		{Role: "system", Content: systemPrompt},
 	}
 
-	// Add history (limited to last 10 exchanges)
+	// Add history (limited to last 20 messages)
 	historyStart := 0
 	if len(req.History) > 20 {
 		historyStart = len(req.History) - 20
@@ -82,19 +117,24 @@ func (h *Handler) handleChat(w http.ResponseWriter, r *http.Request) {
 		Content: userMessage,
 	})
 
-	// Call OpenAI
+	// Streaming mode
+	if req.Stream {
+		h.handleStreamingChat(w, r, messages)
+		return
+	}
+
+	// Non-streaming mode
 	resp, err := h.chatSvc.client.CreateChatCompletion(
-		context.Background(),
+		r.Context(),
 		openai.ChatCompletionRequest{
-			Model:       openai.GPT4o,
+			Model:       h.chatSvc.model,
 			Messages:    messages,
-			MaxTokens:   1500,
+			MaxTokens:   4096,
 			Temperature: 0.7,
 		},
 	)
 	if err != nil {
 		slog.Error("openai error", "error", err)
-		// Fall back to mock on API error
 		response := h.mockResponse(role, company, studentID, req.Message)
 		writeJSON(w, 200, models.ChatResponse{Response: response + "\n\n*(Note: AI service temporarily unavailable — showing cached response)*"})
 		return
@@ -110,71 +150,200 @@ func (h *Handler) handleChat(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleStreamingChat sends the response as Server-Sent Events.
+func (h *Handler) handleStreamingChat(w http.ResponseWriter, r *http.Request, messages []openai.ChatCompletionMessage) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, 500, "streaming not supported")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	stream, err := h.chatSvc.client.CreateChatCompletionStream(
+		r.Context(),
+		openai.ChatCompletionRequest{
+			Model:       h.chatSvc.model,
+			Messages:    messages,
+			MaxTokens:   4096,
+			Temperature: 0.7,
+			Stream:      true,
+		},
+	)
+	if err != nil {
+		slog.Error("stream create error", "error", err)
+		data, _ := json.Marshal(map[string]string{"error": "stream failed"})
+		fmt.Fprintf(w, "data: %s\n\n", data)
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+		flusher.Flush()
+		return
+	}
+	defer stream.Close()
+
+	for {
+		response, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			flusher.Flush()
+			return
+		}
+		if err != nil {
+			slog.Error("stream recv error", "error", err)
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			flusher.Flush()
+			return
+		}
+
+		if len(response.Choices) > 0 {
+			chunk := response.Choices[0].Delta.Content
+			if chunk != "" {
+				data, _ := json.Marshal(map[string]string{"content": chunk})
+				fmt.Fprintf(w, "data: %s\n\n", data)
+				flusher.Flush()
+			}
+		}
+	}
+}
+
 // buildChatContext creates the system prompt and relevant data context for the chat.
 func (h *Handler) buildChatContext(role, company, studentID, message string) (systemPrompt, userContext string) {
 	msg := strings.ToLower(message)
 
 	switch role {
+	case "xo":
+		// XO gets EVERYTHING in the system prompt — full brief mode
+		today := time.Now().Format("2006-01-02")
+
+		var weatherStr string
+		if h.weatherSvc != nil {
+			if wd, err := h.weatherSvc.Get(); err == nil {
+				weatherStr = ai.FormatWeatherForPrompt(wd)
+			} else {
+				slog.Error("weather fetch failed", "error", err)
+				weatherStr = "Weather data temporarily unavailable."
+			}
+		}
+
+		stats := h.store.StudentStats("")
+		qualStats := h.store.QualStats()
+		atRisk := h.store.AtRiskStudents("")
+		todayEvents := h.store.TodaySchedule(today)
+		weekEvents := h.store.ThisWeekSchedule(today)
+		recentFeedback := h.store.RecentFeedback(10)
+		instructors := h.store.ListInstructors("")
+		xoSchedule := h.store.XOScheduleForDate(today)
+
+		systemPrompt = ai.XOSystemPrompt(
+			today, weatherStr, stats, qualStats,
+			atRisk, todayEvents, weekEvents,
+			recentFeedback, instructors, xoSchedule,
+		)
+		// No userContext needed — everything is in the system prompt
+		return systemPrompt, ""
+
 	case "staff":
 		stats := h.store.StudentStats("")
 		systemPrompt = ai.StaffSystemPrompt(stats)
 
-		// Inject relevant data based on query intent
-		if containsAny(msg, "at risk", "at-risk", "struggling", "failing", "concern") {
-			atRisk := h.store.AtRiskStudents("")
-			userContext = ai.AnonymizeStudentList(atRisk)
-		} else if containsAny(msg, "counseling", "counsel") {
-			sid := extractStudentID(msg)
-			if sid != "" {
-				if st, ok := h.store.GetStudent(sid); ok {
-					userContext = ai.AnonymizeStudent(st)
+		// Always inject today's schedule + at-risk summary so Heywood can answer proactively
+		today := time.Now().Format("2006-01-02")
+		var ctxParts []string
+
+		// Today's schedule — always relevant
+		todayEvents := h.store.TodaySchedule(today)
+		if len(todayEvents) > 0 {
+			ctxParts = append(ctxParts, fmt.Sprintf("Today's date: %s\nToday's schedule:", today))
+			for _, e := range todayEvents {
+				graded := ""
+				if e.IsGraded {
+					graded = " [GRADED]"
 				}
+				ctxParts = append(ctxParts, fmt.Sprintf("- %s–%s: %s (%s)%s at %s | Lead: %s", e.StartTime, e.EndTime, e.Title, e.Code, graded, e.Location, e.LeadInstructor))
 			}
-		} else if containsAny(msg, "qual", "certification", "expir") {
-			qs := h.store.QualStats()
-			userContext = fmt.Sprintf("Qualification Status:\nTotal records: %d\nExpired: %d\nExpiring 30 days: %d\nExpiring 60 days: %d\nExpiring 90 days: %d\nCurrent: %d\n",
-				qs.TotalRecords, qs.ExpiredCount, qs.Expiring30, qs.Expiring60, qs.Expiring90, qs.CurrentCount)
-			if len(qs.CoverageGaps) > 0 {
-				userContext += "\nCoverage Gaps:\n"
-				for _, g := range qs.CoverageGaps {
-					userContext += fmt.Sprintf("- %s: %d qualified / %d required (gap: %d)\n", g.QualName, g.QualifiedCount, g.RequiredCount, g.Gap)
+		} else {
+			ctxParts = append(ctxParts, fmt.Sprintf("Today's date: %s\nNo training events scheduled for today.", today))
+		}
+
+		// At-risk summary
+		atRisk := h.store.AtRiskStudents("")
+		if len(atRisk) > 0 {
+			ctxParts = append(ctxParts, fmt.Sprintf("\nAt-risk students: %d total", len(atRisk)))
+			show := 10
+			if show > len(atRisk) {
+				show = len(atRisk)
+			}
+			for _, s := range atRisk[:show] {
+				flags := ""
+				if len(s.RiskFlags) > 0 {
+					flags = " — " + strings.Join(s.RiskFlags, ", ")
 				}
-			}
-		} else if containsAny(msg, "schedule", "training", "event", "calendar") {
-			events := h.store.ListSchedule("")
-			userContext = formatScheduleSummary(events)
-		} else if containsAny(msg, "how", "overall", "status", "summary", "company") {
-			// General overview — include stats and at-risk summary
-			atRisk := h.store.AtRiskStudents("")
-			if len(atRisk) > 5 {
-				atRisk = atRisk[:5]
-			}
-			userContext = ai.AnonymizeStudentList(atRisk)
-		} else if sid := extractStudentID(msg); sid != "" {
-			if st, ok := h.store.GetStudent(sid); ok {
-				userContext = ai.AnonymizeStudent(st)
+				ctxParts = append(ctxParts, fmt.Sprintf("- %s (%s): Overall %.1f, Trend: %s%s", s.ID, s.Rank, s.OverallComposite, s.Trend, flags))
 			}
 		}
+
+		// Qual alerts
+		qs := h.store.QualStats()
+		if qs.ExpiredCount > 0 || qs.Expiring30 > 0 {
+			ctxParts = append(ctxParts, fmt.Sprintf("\nQual alerts: %d expired, %d critical (30d), %d coverage gaps", qs.ExpiredCount, qs.Expiring30, len(qs.CoverageGaps)))
+		}
+
+		// Specific student lookup if mentioned
+		if sid := extractStudentID(msg); sid != "" {
+			if st, ok := h.store.GetStudent(sid); ok {
+				ctxParts = append(ctxParts, "\nRequested student detail:\n"+ai.AnonymizeStudent(st))
+			}
+		}
+
+		userContext = strings.Join(ctxParts, "\n")
 
 	case "spc":
 		stats := h.store.StudentStats(company)
 		systemPrompt = ai.SPCSystemPrompt(stats, company)
 
-		if containsAny(msg, "at risk", "at-risk", "struggling") {
-			atRisk := h.store.AtRiskStudents(company)
-			userContext = ai.AnonymizeStudentList(atRisk)
-		} else if containsAny(msg, "counseling", "counsel") {
-			sid := extractStudentID(msg)
-			if sid != "" {
-				if st, ok := h.store.GetStudent(sid); ok {
-					userContext = ai.AnonymizeStudent(st)
+		// Always inject today's schedule + company at-risk
+		today := time.Now().Format("2006-01-02")
+		var ctxParts []string
+
+		todayEvents := h.store.TodaySchedule(today)
+		if len(todayEvents) > 0 {
+			ctxParts = append(ctxParts, fmt.Sprintf("Today's date: %s\nToday's schedule:", today))
+			for _, e := range todayEvents {
+				graded := ""
+				if e.IsGraded {
+					graded = " [GRADED]"
 				}
+				ctxParts = append(ctxParts, fmt.Sprintf("- %s–%s: %s (%s)%s at %s | Lead: %s", e.StartTime, e.EndTime, e.Title, e.Code, graded, e.Location, e.LeadInstructor))
 			}
-		} else if sid := extractStudentID(msg); sid != "" {
-			if st, ok := h.store.GetStudent(sid); ok {
-				userContext = ai.AnonymizeStudent(st)
+		} else {
+			ctxParts = append(ctxParts, fmt.Sprintf("Today's date: %s\nNo training events scheduled for today.", today))
+		}
+
+		atRisk := h.store.AtRiskStudents(company)
+		if len(atRisk) > 0 {
+			ctxParts = append(ctxParts, fmt.Sprintf("\nAt-risk students in %s Company: %d", company, len(atRisk)))
+			show := 10
+			if show > len(atRisk) {
+				show = len(atRisk)
+			}
+			for _, s := range atRisk[:show] {
+				flags := ""
+				if len(s.RiskFlags) > 0 {
+					flags = " — " + strings.Join(s.RiskFlags, ", ")
+				}
+				ctxParts = append(ctxParts, fmt.Sprintf("- %s (%s): Overall %.1f, Trend: %s%s", s.ID, s.Rank, s.OverallComposite, s.Trend, flags))
 			}
 		}
+
+		if sid := extractStudentID(msg); sid != "" {
+			if st, ok := h.store.GetStudent(sid); ok {
+				ctxParts = append(ctxParts, "\nRequested student detail:\n"+ai.AnonymizeStudent(st))
+			}
+		}
+
+		userContext = strings.Join(ctxParts, "\n")
 
 	case "student":
 		var student *models.Student
@@ -182,7 +351,34 @@ func (h *Handler) buildChatContext(role, company, studentID, message string) (sy
 			student, _ = h.store.GetStudent(studentID)
 		}
 		systemPrompt = ai.StudentSystemPrompt(student)
-		// Student context is already in the system prompt
+
+		// Inject today's schedule + the student's own data
+		today := time.Now().Format("2006-01-02")
+		var ctxParts []string
+
+		todayEvents := h.store.TodaySchedule(today)
+		if len(todayEvents) > 0 {
+			ctxParts = append(ctxParts, fmt.Sprintf("Today's date: %s\nToday's training schedule:", today))
+			for _, e := range todayEvents {
+				graded := ""
+				if e.IsGraded {
+					graded = " [GRADED]"
+				}
+				ctxParts = append(ctxParts, fmt.Sprintf("- %s–%s: %s%s at %s", e.StartTime, e.EndTime, e.Title, graded, e.Location))
+			}
+		} else {
+			ctxParts = append(ctxParts, fmt.Sprintf("Today's date: %s\nNo training events scheduled for today.", today))
+		}
+
+		if student != nil {
+			ctxParts = append(ctxParts, fmt.Sprintf("\nYour current scores:\n- Academic: %.1f (Exams: %.0f, %.0f, %.0f, %.0f | Quiz Avg: %.1f)\n- Mil Skills: %.1f (PFT: %d, CFT: %d)\n- Leadership: %.1f\n- Overall: %.1f\n- Trend: %s\n- At-Risk: %v",
+				student.AcademicComposite, student.Exam1, student.Exam2, student.Exam3, student.Exam4, student.QuizAvg,
+				student.MilSkillsComposite, student.PFTScore, student.CFTScore,
+				student.LeadershipComposite,
+				student.OverallComposite, student.Trend, student.AtRisk))
+		}
+
+		userContext = strings.Join(ctxParts, "\n")
 	}
 
 	return systemPrompt, userContext
@@ -192,7 +388,42 @@ func (h *Handler) buildChatContext(role, company, studentID, message string) (sy
 func (h *Handler) mockResponse(role, company, studentID, message string) string {
 	msg := strings.ToLower(message)
 
-	// Check for specific intents
+	// XO mock: comprehensive greeting
+	if role == "xo" {
+		stats := h.store.StudentStats("")
+		qualStats := h.store.QualStats()
+		atRisk := h.store.AtRiskStudents("")
+		today := time.Now().Format("Monday, January 2, 2006")
+
+		if len(message) < 30 || containsAny(msg, "today", "status", "brief", "morning", "what") {
+			return fmt.Sprintf("## Good morning, sir. Heywood online.\n\n"+
+				"**Morning Brief — %s**\n\n"+
+				"### Company Status\n"+
+				"- **Active Students:** %d\n"+
+				"- **Average Composite:** %.1f\n"+
+				"- **At-Risk:** %d (%.1f%%)\n\n"+
+				"### Instructor Quals\n"+
+				"- **Expired:** %d | **Critical (30d):** %d | **Warning (60d):** %d\n"+
+				"- **Coverage Gaps:** %d qualifications below minimum staffing\n\n"+
+				"### At-Risk Students Requiring Attention\n"+
+				"Top concerns:\n%s\n"+
+				"### Recommendations\n"+
+				"1. Prioritize counseling for students with declining trends\n"+
+				"2. Address the %d expired instructor qualifications before next week's graded events\n"+
+				"3. Review coverage gaps to ensure upcoming ranges are adequately staffed\n\n"+
+				"Anything else you'd like to drill into, sir?\n\n"+
+				"*AI-generated analysis — verify all data before taking action.*",
+				today,
+				stats.ActiveStudents, stats.AvgComposite,
+				stats.AtRiskCount, stats.AtRiskPercent,
+				qualStats.ExpiredCount, qualStats.Expiring30, qualStats.Expiring60,
+				len(qualStats.CoverageGaps),
+				formatTopAtRisk(atRisk, 5),
+				qualStats.ExpiredCount)
+		}
+	}
+
+	// Existing mock logic for other roles
 	if containsAny(msg, "at risk", "at-risk", "struggling", "failing") {
 		var atRisk []models.Student
 		if role == "spc" {
@@ -235,7 +466,7 @@ func (h *Handler) mockResponse(role, company, studentID, message string) string 
 		return ai.MockScenarioResponse(phase, objective, terrain)
 	}
 
-	if containsAny(msg, "qual", "certification", "expir") && role == "staff" {
+	if containsAny(msg, "qual", "certification", "expir") && (role == "staff" || role == "xo") {
 		qs := h.store.QualStats()
 		var b strings.Builder
 		fmt.Fprintf(&b, "**Instructor Qualification Status:**\n\n")
@@ -250,7 +481,7 @@ func (h *Handler) mockResponse(role, company, studentID, message string) string 
 				fmt.Fprintf(&b, "- %s: %d qualified / %d required (**gap: %d**)\n", g.QualName, g.QualifiedCount, g.RequiredCount, g.Gap)
 			}
 		}
-		b.WriteString("\n*This is AI-generated analysis. Verify all data before taking action.*")
+		b.WriteString("\n*AI-generated analysis. Verify all data before taking action.*")
 		return b.String()
 	}
 
@@ -266,7 +497,6 @@ func (h *Handler) mockResponse(role, company, studentID, message string) string 
 			stats.AtRiskCount, stats.AtRiskPercent, stats.AtRiskCount)
 	}
 
-	// Check for specific student ID
 	if sid := extractStudentID(msg); sid != "" {
 		if st, ok := h.store.GetStudent(sid); ok {
 			return fmt.Sprintf("**%s — %s**\n\n"+
@@ -288,13 +518,34 @@ func (h *Handler) mockResponse(role, company, studentID, message string) string 
 		}
 	}
 
-	// Short messages are likely greetings
 	if len(message) < 20 {
 		stats := h.store.StudentStats(company)
 		return ai.MockGreeting(role, stats)
 	}
 
 	return ai.MockGeneralResponse(message)
+}
+
+func formatTopAtRisk(students []models.Student, n int) string {
+	if len(students) == 0 {
+		return "No students currently at-risk.\n"
+	}
+	var b strings.Builder
+	show := n
+	if show > len(students) {
+		show = len(students)
+	}
+	for _, s := range students[:show] {
+		flags := strings.Join(s.RiskFlags, ", ")
+		if flags == "" {
+			flags = "composite/trend"
+		}
+		fmt.Fprintf(&b, "- **%s** (%s): Overall %.1f, Trend: %s — %s\n", s.ID, s.Rank, s.OverallComposite, s.Trend, flags)
+	}
+	if len(students) > n {
+		fmt.Fprintf(&b, "- ...and %d more\n", len(students)-n)
+	}
+	return b.String()
 }
 
 func containsAny(s string, substrs ...string) bool {
@@ -307,13 +558,11 @@ func containsAny(s string, substrs ...string) bool {
 }
 
 func extractStudentID(msg string) string {
-	// Look for STU-XXX pattern
 	msg = strings.ToUpper(msg)
 	idx := strings.Index(msg, "STU-")
 	if idx >= 0 && idx+7 <= len(msg) {
 		return msg[idx : idx+7]
 	}
-	// Look for "student #XX" or "student XX" pattern
 	for _, prefix := range []string{"STUDENT #", "STUDENT "} {
 		idx = strings.Index(msg, prefix)
 		if idx >= 0 {
@@ -357,4 +606,3 @@ func formatScheduleSummary(events []models.TrainingEvent) string {
 	}
 	return b.String()
 }
-

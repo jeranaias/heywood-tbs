@@ -151,6 +151,7 @@ export interface CoverageGap {
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+  streaming?: boolean
 }
 
 export interface AuthInfo {
@@ -160,4 +161,4 @@ export interface AuthInfo {
   name: string
 }
 
-export type Role = 'staff' | 'spc' | 'student'
+export type Role = 'xo' | 'staff' | 'spc' | 'student'

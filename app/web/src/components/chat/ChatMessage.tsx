@@ -59,10 +59,16 @@ export function ChatMessageBubble({ message }: ChatMessageBubbleProps) {
       }`}>
         {isUser ? (
           <p className="text-sm">{message.content}</p>
+        ) : message.streaming && !message.content ? (
+          <div className="flex items-center gap-1.5 py-1">
+            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+          </div>
         ) : (
           <div
-            className="chat-markdown text-sm leading-relaxed"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }}
+            className={`chat-markdown text-sm leading-relaxed ${message.streaming ? 'streaming-cursor' : ''}`}
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content || '') }}
           />
         )}
       </div>

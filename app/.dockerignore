@@ -1,0 +1,11 @@
+node_modules
+web/node_modules
+web/dist
+bin
+.env
+.env.local
+*.md
+.git
+.gitignore
+.vscode
+.idea

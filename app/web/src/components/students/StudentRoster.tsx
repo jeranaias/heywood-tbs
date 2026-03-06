@@ -7,12 +7,13 @@ import { formatScore, scoreBadge, trendIcon, trendColor } from '../../lib/utils'
 interface StudentRosterProps {
   students: Student[]
   compact?: boolean
+  hideSearch?: boolean
 }
 
 type SortKey = 'lastName' | 'overallComposite' | 'academicComposite' | 'milSkillsComposite' | 'leadershipComposite' | 'companyRank'
 type SortDir = 'asc' | 'desc'
 
-export function StudentRoster({ students, compact = false }: StudentRosterProps) {
+export function StudentRoster({ students, compact = false, hideSearch = false }: StudentRosterProps) {
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState<SortKey>('companyRank')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
@@ -58,19 +59,21 @@ export function StudentRoster({ students, compact = false }: StudentRosterProps)
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(0) }}
-            placeholder="Search students..."
-            className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-navy)]/20"
-          />
+      {!hideSearch && (
+        <div className="flex items-center gap-3 mb-4">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(0) }}
+              placeholder="Search students..."
+              className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-navy)]/20"
+            />
+          </div>
+          <span className="text-sm text-slate-500">{filtered.length} students</span>
         </div>
-        <span className="text-sm text-slate-500">{filtered.length} students</span>
-      </div>
+      )}
 
       <div className="overflow-x-auto bg-white rounded-lg border border-slate-200">
         <table className="w-full text-sm">
@@ -131,7 +134,7 @@ export function StudentRoster({ students, compact = false }: StudentRosterProps)
                     {s.lastName}, {s.firstName}
                   </Link>
                 </td>
-                <td className="px-3 py-2 text-slate-600 text-xs">{s.phase.replace('Phase ', 'Ph ').substring(0, 15)}</td>
+                <td className="px-3 py-2 text-slate-600 text-xs whitespace-nowrap">{s.phase.replace('Phase 1 - Foundations', 'Ph 1').replace('Phase 2 - Warfighting', 'Ph 2').replace('Phase 3 - Leadership', 'Ph 3').replace(/Phase (\d+).*/, 'Ph $1')}</td>
                 <td className="px-3 py-2 text-right">
                   <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${scoreBadge(s.academicComposite)}`}>
                     {formatScore(s.academicComposite)}

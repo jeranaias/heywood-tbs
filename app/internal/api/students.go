@@ -45,7 +45,7 @@ func (h *Handler) handleListStudents(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, 200, map[string]interface{}{
 		"students": students,
-		"total":    len(h.store.Students),
+		"total":    h.store.TotalStudentCount(),
 		"filtered": len(students),
 	})
 }

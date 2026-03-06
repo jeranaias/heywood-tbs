@@ -43,6 +43,7 @@ export function getAuth(): AuthInfo {
 
 export function switchAuth(role: string, company: string, studentId?: string): AuthInfo {
   const names: Record<string, string> = {
+    xo: 'Executive Officer',
     staff: 'TBS Staff',
     spc: `SPC (${company} Company)`,
     student: `Student ${studentId || 'STU-001'}`,

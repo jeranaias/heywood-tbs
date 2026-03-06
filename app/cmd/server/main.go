@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"heywood-tbs/internal/ai"
 	"heywood-tbs/internal/api"
 	"heywood-tbs/internal/data"
 	"heywood-tbs/internal/middleware"
@@ -32,17 +33,17 @@ func main() {
 		"feedback", len(store.Feedback),
 	)
 
-	// Initialize chat service (nil if no API key = mock mode)
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	chatSvc := api.NewChatService(apiKey)
+	// Initialize chat service (auto-detects Azure vs OpenAI from env vars)
+	chatSvc := api.NewChatService()
 	if chatSvc == nil {
-		slog.Warn("OPENAI_API_KEY not set — AI features will use mock responses")
-	} else {
-		slog.Info("OpenAI API configured — AI features active")
+		slog.Warn("No AI API keys configured — using mock responses")
 	}
 
+	// Initialize weather service
+	weatherSvc := &ai.WeatherService{}
+
 	// Build handler and router
-	handler := api.NewHandler(store, chatSvc)
+	handler := api.NewHandler(store, chatSvc, weatherSvc, *dev)
 	mux := api.SetupRouter(handler)
 
 	// Serve static files in production (embedded SPA)
@@ -59,6 +60,7 @@ func main() {
 
 	// Apply middleware
 	chain := middleware.Chain(
+		middleware.SecurityHeaders,
 		middleware.CORS(*dev),
 		middleware.Auth,
 	)

@@ -1,0 +1,54 @@
+[
+  {
+    "id": "XO-001",
+    "type": "meeting",
+    "title": "Company Commanders Conference",
+    "date": "2026-03-05",
+    "startTime": "1000",
+    "endTime": "1100",
+    "location": "TBS Conference Room 201",
+    "onBase": true,
+    "attendees": ["Capt Martinez (Alpha Co CO)", "Capt Nguyen (Bravo Co CO)", "Capt Williams (Charlie Co CO)", "1stSgt Davis (Alpha Co 1stSgt)"],
+    "agenda": "Range allocation for Weeks 10-12, Phase II graded event scheduling conflicts, instructor cross-leveling between companies, at-risk student review board results",
+    "notes": "Bring updated company status slides. CO wants final range allocation by COB Friday."
+  },
+  {
+    "id": "XO-002",
+    "type": "appointment",
+    "title": "Dental — Annual Screening",
+    "date": "2026-03-05",
+    "startTime": "1400",
+    "endTime": "1500",
+    "location": "Naval Health Clinic Quantico, Bldg 1040",
+    "onBase": false,
+    "attendees": [],
+    "agenda": "",
+    "notes": "Off-base. Approx 12 min drive from TBS via Fuller Rd / MCB Quantico Main Gate. Allow 20 min for gate traffic."
+  },
+  {
+    "id": "XO-003",
+    "type": "meeting",
+    "title": "Weekly AAR Sync with S-3",
+    "date": "2026-03-06",
+    "startTime": "0900",
+    "endTime": "0945",
+    "location": "S-3 Office, TBS HQ",
+    "onBase": true,
+    "attendees": ["Maj Peterson (S-3)", "Capt Rivera (Asst S-3)"],
+    "agenda": "Review feedback from last week's field exercises, consolidate lessons learned, update training calendar",
+    "notes": ""
+  },
+  {
+    "id": "XO-004",
+    "type": "meeting",
+    "title": "At-Risk Student Review Board",
+    "date": "2026-03-07",
+    "startTime": "1300",
+    "endTime": "1430",
+    "location": "TBS Conference Room 201",
+    "onBase": true,
+    "attendees": ["CO", "All SPCs", "Academic Advisor"],
+    "agenda": "Review all students below 78 overall composite, counseling progress updates, recommendation for remediation or board action",
+    "notes": "Prepare individual student briefs for each at-risk student"
+  }
+]

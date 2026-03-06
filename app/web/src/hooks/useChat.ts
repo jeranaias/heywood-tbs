@@ -10,27 +10,67 @@ export function useChat() {
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim() || loading) return
 
+    // Cancel any in-flight stream
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
     const userMsg: ChatMessage = { role: 'user', content }
     setMessages(prev => [...prev, userMsg])
     setLoading(true)
 
+    // Add a placeholder streaming message
+    const streamMsg: ChatMessage = { role: 'assistant', content: '', streaming: true }
+    setMessages(prev => [...prev, streamMsg])
+
     try {
-      const history = messages.slice(-20) // Last 10 exchanges
-      const res = await api.chat(content, history)
-      const assistantMsg: ChatMessage = { role: 'assistant', content: res.response }
-      setMessages(prev => [...prev, assistantMsg])
+      const history = messages.slice(-20)
+
+      await api.chatStream(
+        content,
+        history,
+        // onChunk: append to the last message
+        (chunk: string) => {
+          setMessages(prev => {
+            const updated = [...prev]
+            const last = updated[updated.length - 1]
+            updated[updated.length - 1] = { ...last, content: last.content + chunk }
+            return updated
+          })
+        },
+        // onDone: clear streaming flag
+        () => {
+          setMessages(prev => {
+            const updated = [...prev]
+            const last = updated[updated.length - 1]
+            updated[updated.length - 1] = { ...last, streaming: false }
+            return updated
+          })
+        },
+        controller.signal,
+      )
     } catch (err) {
-      const errorMsg: ChatMessage = {
-        role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
-      }
-      setMessages(prev => [...prev, errorMsg])
+      if ((err as Error).name === 'AbortError') return
+      setMessages(prev => {
+        const updated = [...prev]
+        const last = updated[updated.length - 1]
+        if (last.streaming) {
+          updated[updated.length - 1] = {
+            role: 'assistant',
+            content: last.content || 'Sorry, I encountered an error. Please try again.',
+            streaming: false,
+          }
+        }
+        return updated
+      })
     } finally {
       setLoading(false)
+      abortRef.current = null
     }
   }, [messages, loading])
 
   const clearMessages = useCallback(() => {
+    abortRef.current?.abort()
     setMessages([])
   }, [])
 

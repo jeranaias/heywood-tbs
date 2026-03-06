@@ -135,17 +135,82 @@ export const api = {
     return get<{ events: TrainingEvent[]; total: number }>('/schedule', params)
   },
 
-  // Chat
+  // Chat (non-streaming)
   chat: async (message: string, history: ChatMessage[]) => {
     if (STATIC) {
       const sd = await getStaticModule()
       const mc = await getMockChatModule()
       const auth = sd.getAuth()
-      // Simulate network delay for realism
       await new Promise(r => setTimeout(r, 300 + Math.random() * 700))
       return { response: mc.generateMockResponse(message, history, auth.role) }
     }
     return post<{ response: string }>('/chat', { message, history })
+  },
+
+  // Chat (SSE streaming)
+  chatStream: async (
+    message: string,
+    history: ChatMessage[],
+    onChunk: (chunk: string) => void,
+    onDone: () => void,
+    signal?: AbortSignal,
+  ) => {
+    if (STATIC) {
+      // Simulate streaming for static mode
+      const sd = await getStaticModule()
+      const mc = await getMockChatModule()
+      const auth = sd.getAuth()
+      const full = mc.generateMockResponse(message, history, auth.role)
+      // Simulate token-by-token output
+      const words = full.split(/(\s+)/)
+      for (let i = 0; i < words.length; i++) {
+        if (signal?.aborted) return
+        onChunk(words[i])
+        await new Promise(r => setTimeout(r, 15 + Math.random() * 25))
+      }
+      onDone()
+      return
+    }
+
+    const res = await fetch(`${API}/chat`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, history, stream: true }),
+      signal,
+    })
+    if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`)
+    if (!res.body) throw new Error('No response body')
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || !trimmed.startsWith('data: ')) continue
+        const data = trimmed.slice(6)
+        if (data === '[DONE]') {
+          onDone()
+          return
+        }
+        try {
+          const parsed = JSON.parse(data) as { content?: string; error?: string }
+          if (parsed.content) onChunk(parsed.content)
+        } catch {
+          // skip malformed chunks
+        }
+      }
+    }
+    onDone()
   },
 
   // Auth

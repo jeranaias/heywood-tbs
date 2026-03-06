@@ -16,12 +16,12 @@ interface SidebarProps {
 
 export function Sidebar({ role, onClose }: SidebarProps) {
   const links = [
-    { to: '/chat', label: 'Chat', icon: MessageSquare, roles: ['staff', 'spc', 'student'] },
-    { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['staff', 'spc'] },
-    { to: '/students', label: 'Students', icon: Users, roles: ['staff', 'spc'] },
-    { to: '/at-risk', label: 'At-Risk', icon: AlertTriangle, roles: ['staff', 'spc'] },
-    { to: '/instructor-quals', label: 'Instructor Quals', icon: Shield, roles: ['staff'] },
-    { to: '/schedule', label: 'Schedule', icon: Calendar, roles: ['staff', 'spc'] },
+    { to: '/chat', label: 'Chat', icon: MessageSquare, roles: ['xo', 'staff', 'spc', 'student'] },
+    { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['xo', 'staff', 'spc'] },
+    { to: '/students', label: 'Students', icon: Users, roles: ['xo', 'staff', 'spc'] },
+    { to: '/at-risk', label: 'At-Risk', icon: AlertTriangle, roles: ['xo', 'staff', 'spc'] },
+    { to: '/instructor-quals', label: 'Instructor Quals', icon: Shield, roles: ['xo', 'staff'] },
+    { to: '/schedule', label: 'Schedule', icon: Calendar, roles: ['xo', 'staff', 'spc'] },
     { to: '/my-record', label: 'My Record', icon: User, roles: ['student'] },
   ]
 

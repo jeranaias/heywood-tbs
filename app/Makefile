@@ -1,4 +1,4 @@
-.PHONY: dev dev-api dev-web build build-web build-go serve clean convert-data
+.PHONY: dev dev-api dev-web build build-web build-go serve clean convert-data docker docker-run
 
 # Run API + Vite dev server concurrently
 dev:
@@ -41,6 +41,14 @@ build-static:
 # Preview static build locally
 preview-static: build-static
 	cd web && npx vite preview --mode static --port 4173
+
+# Docker build
+docker:
+	docker build -t heywood-tbs .
+
+# Run in Docker (pass OPENAI_API_KEY or Azure env vars)
+docker-run: docker
+	docker run -p 8080:8080 --env-file .env heywood-tbs
 
 clean:
 	rm -rf bin/ web/dist/ web/node_modules/

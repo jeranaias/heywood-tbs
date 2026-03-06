@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Menu, ChevronDown, User, Shield, Users } from 'lucide-react'
+import { Menu, ChevronDown, User, Shield, Users, Crown } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import type { Role } from '../../lib/types'
 
@@ -8,8 +8,9 @@ interface HeaderProps {
 }
 
 const roles: { value: Role; label: string; desc: string; icon: typeof User }[] = [
-  { value: 'staff', label: 'Staff', desc: 'Full TBS-wide access', icon: Shield },
-  { value: 'spc', label: 'SPC (Alpha Co)', desc: 'Company-filtered view', icon: Users },
+  { value: 'xo', label: 'Executive Officer', desc: 'Full brief mode — all data', icon: Crown },
+  { value: 'staff', label: 'Staff Officer', desc: 'Full TBS-wide access', icon: Shield },
+  { value: 'spc', label: 'SPC (Alpha Co)', desc: 'Company-scoped view', icon: Users },
   { value: 'student', label: 'Student', desc: 'Individual record only', icon: User },
 ]
 

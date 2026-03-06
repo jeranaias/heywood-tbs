@@ -184,10 +184,26 @@ type CoverageGap struct {
 	Gap            int    `json:"gap"`
 }
 
+// XOScheduleItem is a personal schedule entry for the XO (meetings, appointments).
+type XOScheduleItem struct {
+	ID        string   `json:"id"`
+	Type      string   `json:"type"`      // "meeting" or "appointment"
+	Title     string   `json:"title"`
+	Date      string   `json:"date"`
+	StartTime string   `json:"startTime"`
+	EndTime   string   `json:"endTime"`
+	Location  string   `json:"location"`
+	OnBase    bool     `json:"onBase"`
+	Attendees []string `json:"attendees"`
+	Agenda    string   `json:"agenda"`
+	Notes     string   `json:"notes"`
+}
+
 // ChatRequest is the request body for the chat endpoint.
 type ChatRequest struct {
 	Message string        `json:"message"`
 	History []ChatMessage `json:"history"`
+	Stream  bool          `json:"stream"`
 }
 
 // ChatMessage represents a single message in chat history.

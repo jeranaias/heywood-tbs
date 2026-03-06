@@ -68,6 +68,16 @@ export function generateMockResponse(message: string, _history: ChatMessage[], r
 function mockGreeting(role: string): string {
   const stats = data.getStudentStats()
   switch (role) {
+    case 'xo':
+      return `Good morning, sir. Heywood online.\n\n` +
+        `## Morning Brief — ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n\n` +
+        `**Company Status:** ${stats.activeStudents} active students, average composite ${stats.avgComposite.toFixed(1)}. ` +
+        `${stats.atRiskCount} students (${stats.atRiskPercent.toFixed(1)}%) flagged at-risk.\n\n` +
+        `**Key Items:**\n` +
+        `- ${stats.atRiskCount} at-risk students requiring attention\n` +
+        `- Training schedule on track for the week\n` +
+        `- Instructor qualifications: check for any critical expirations\n\n` +
+        `What would you like to dig into first, sir?`
     case 'staff':
       return `Good morning. I'm Heywood, your digital staff officer for TBS.\n\n` +
         `Current status: ${stats.activeStudents} active students, average composite ${stats.avgComposite.toFixed(1)}. ` +

@@ -51,3 +51,26 @@ body {
 .chat-markdown table { border-collapse: collapse; margin: 0.5em 0; width: 100%; }
 .chat-markdown th, .chat-markdown td { border: 1px solid #e2e8f0; padding: 0.375em 0.75em; text-align: left; }
 .chat-markdown th { background: #f8fafc; font-weight: 600; }
+
+/* Streaming cursor animation */
+.streaming-cursor::after {
+  content: '\25AE';
+  animation: blink-cursor 0.8s steps(2) infinite;
+  color: var(--color-navy);
+  font-weight: 700;
+  margin-left: 1px;
+}
+
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Chat widget slide-in */
+.animate-slide-in {
+  animation: slide-in 0.2s ease-out;
+}
+@keyframes slide-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}

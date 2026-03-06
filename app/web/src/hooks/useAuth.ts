@@ -29,7 +29,7 @@ export function useAuthProvider() {
   const switchRole = useCallback(async (role: Role, studentId?: string) => {
     setLoading(true)
     try {
-      const company = role === 'spc' ? 'Alpha' : ''
+      const company = (role === 'spc') ? 'Alpha' : ''
       const sid = role === 'student' ? (studentId || 'STU-001') : ''
       const info = await api.switchRole(role, company, sid)
       setAuth(info)

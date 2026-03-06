@@ -1,10 +1,10 @@
 import { useState, useRef } from 'react'
 import { Send, Loader2, Trash2 } from 'lucide-react'
 import { ChatHistory } from '../components/chat/ChatHistory'
-import { useChat } from '../hooks/useChat'
+import { useChatContext } from '../hooks/ChatContext'
 
 export function ChatPage() {
-  const { messages, loading, sendMessage, clearMessages } = useChat()
+  const { messages, loading, sendMessage, clearMessages } = useChatContext()
   const [input, setInput] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 

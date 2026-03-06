@@ -5,10 +5,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	"heywood-tbs/internal/models"
 )
+
+// Compile-time check that Store implements DataStore.
+var _ DataStore = (*Store)(nil)
 
 // Store holds all TBS data in memory with indexed lookups.
 type Store struct {
@@ -18,6 +23,7 @@ type Store struct {
 	Qualifications []models.Qualification
 	QualRecords    []models.QualRecord
 	Feedback       []models.EventFeedback
+	XOSchedule     []models.XOScheduleItem
 
 	studentByID    map[string]*models.Student
 	instructorByID map[string]*models.Instructor
@@ -48,6 +54,8 @@ func NewStore(dataDir string) (*Store, error) {
 	if err := loadJSON(filepath.Join(dataDir, "feedback.json"), &s.Feedback); err != nil {
 		return nil, fmt.Errorf("load feedback: %w", err)
 	}
+	// XO schedule is optional — not an error if missing
+	_ = loadJSON(filepath.Join(dataDir, "xo-schedule.json"), &s.XOSchedule)
 
 	// Build indexes
 	for i := range s.Students {
@@ -237,5 +245,84 @@ func (s *Store) ListFeedback(eventCode string) []models.EventFeedback {
 			result = append(result, fb)
 		}
 	}
+	return result
+}
+
+// TodaySchedule returns training events scheduled for the given date (YYYY-MM-DD).
+func (s *Store) TodaySchedule(today string) []models.TrainingEvent {
+	var result []models.TrainingEvent
+	for _, evt := range s.Schedule {
+		if evt.StartDate == today {
+			result = append(result, evt)
+		}
+	}
+	return result
+}
+
+// ThisWeekSchedule returns events in the same Mon-Sun week as the given date.
+func (s *Store) ThisWeekSchedule(today string) []models.TrainingEvent {
+	t, err := time.Parse("2006-01-02", today)
+	if err != nil {
+		return nil
+	}
+	// Find Monday of this week
+	weekday := int(t.Weekday())
+	if weekday == 0 {
+		weekday = 7 // Sunday = 7
+	}
+	monday := t.AddDate(0, 0, -(weekday - 1))
+	sunday := monday.AddDate(0, 0, 6)
+	monStr := monday.Format("2006-01-02")
+	sunStr := sunday.Format("2006-01-02")
+
+	var result []models.TrainingEvent
+	for _, evt := range s.Schedule {
+		if evt.StartDate >= monStr && evt.StartDate <= sunStr {
+			result = append(result, evt)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].StartDate == result[j].StartDate {
+			return result[i].StartTime < result[j].StartTime
+		}
+		return result[i].StartDate < result[j].StartDate
+	})
+	return result
+}
+
+// RecentFeedback returns the last n feedback entries.
+func (s *Store) RecentFeedback(n int) []models.EventFeedback {
+	if n >= len(s.Feedback) {
+		return s.Feedback
+	}
+	return s.Feedback[len(s.Feedback)-n:]
+}
+
+// ListQualifications returns all qualification reference entries.
+func (s *Store) ListQualifications() []models.Qualification {
+	return s.Qualifications
+}
+
+// ListQualRecords returns all instructor qualification records.
+func (s *Store) ListQualRecords() []models.QualRecord {
+	return s.QualRecords
+}
+
+// TotalStudentCount returns the total number of students loaded.
+func (s *Store) TotalStudentCount() int {
+	return len(s.Students)
+}
+
+// XOScheduleForDate returns XO schedule items for a given date.
+func (s *Store) XOScheduleForDate(date string) []models.XOScheduleItem {
+	var result []models.XOScheduleItem
+	for _, item := range s.XOSchedule {
+		if item.Date == date {
+			result = append(result, item)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].StartTime < result[j].StartTime
+	})
 	return result
 }

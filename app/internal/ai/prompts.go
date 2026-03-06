@@ -2,6 +2,7 @@ package ai
 
 import (
 	"fmt"
+	"strings"
 
 	"heywood-tbs/internal/models"
 )
@@ -111,6 +112,218 @@ Be encouraging but honest about areas needing improvement.`,
 		student.AcademicComposite, student.Exam1, student.Exam2, student.Exam3, student.Exam4, student.QuizAvg,
 		student.MilSkillsComposite, student.LeadershipComposite,
 		student.OverallComposite, student.Trend)
+}
+
+// XOSystemPrompt builds the comprehensive system prompt for the XO.
+// All relevant data is injected — no keyword-based context selection needed.
+func XOSystemPrompt(
+	today string,
+	weather string,
+	stats models.StudentStats,
+	qualStats models.QualStats,
+	atRiskStudents []models.Student,
+	todayEvents []models.TrainingEvent,
+	weekEvents []models.TrainingEvent,
+	recentFeedback []models.EventFeedback,
+	instructors []models.Instructor,
+	xoSchedule []models.XOScheduleItem,
+) string {
+	var b strings.Builder
+
+	// Persona
+	b.WriteString(`You are HEYWOOD, the Digital Staff Officer for The Basic School (TBS), Alpha Company, USMC, Quantico, Virginia. You report directly to the Executive Officer.
+
+YOUR PERSONA:
+- Anticipatory, proactive, comprehensive, confident, and slightly formal but personable
+- Address the XO as "sir"
+- Volunteer information the XO needs, even if not explicitly asked
+- Be data-driven — cite specific names, numbers, and trends
+- When something is concerning, flag it immediately and recommend action
+- You know every Marine in the company by name — always use their name and rank, not just IDs
+
+WHEN GREETED OR ASKED "what do we have today?" / "status" / "what's going on" / "morning brief":
+Deliver a comprehensive morning brief in this order:
+1. Good morning greeting with date
+2. XO's personal schedule (meetings, appointments, travel notes)
+3. Weather and uniform recommendation
+4. Today's training events with instructor assignments
+5. At-risk student alerts with NAMES (most critical first)
+6. Instructor qualification alerts
+7. Company performance snapshot
+8. Proactive recommendations
+
+`)
+
+	// TBS grading facts
+	b.WriteString(`KEY TBS GRADING FACTS:
+- Academic Pillar: 32% (4 exams + quiz average)
+- Military Skills Pillar: 32% (PFT, CFT, rifle/pistol qual, land nav, obstacle/endurance)
+- Leadership Pillar: 36% (SPC evals Week 12 & 22, peer evals)
+- At-risk: any pillar < 75, overall < 78, or negative trend
+
+`)
+
+	// Today's date + weather
+	fmt.Fprintf(&b, "TODAY'S DATE: %s\n\n", today)
+
+	// XO personal schedule
+	if len(xoSchedule) > 0 {
+		b.WriteString("=== YOUR SCHEDULE TODAY ===\n")
+		for _, item := range xoSchedule {
+			emoji := "📋"
+			if item.Type == "appointment" {
+				emoji = "🏥"
+			}
+			fmt.Fprintf(&b, "%s %s–%s: %s at %s\n", emoji, item.StartTime, item.EndTime, item.Title, item.Location)
+			if len(item.Attendees) > 0 {
+				fmt.Fprintf(&b, "   Attendees: %s\n", strings.Join(item.Attendees, ", "))
+			}
+			if item.Agenda != "" {
+				fmt.Fprintf(&b, "   Agenda: %s\n", item.Agenda)
+			}
+			if !item.OnBase {
+				fmt.Fprintf(&b, "   ⚠ OFF-BASE — %s\n", item.Notes)
+			} else if item.Notes != "" {
+				fmt.Fprintf(&b, "   Notes: %s\n", item.Notes)
+			}
+		}
+		b.WriteString("\n")
+	}
+
+	if weather != "" {
+		fmt.Fprintf(&b, "=== WEATHER ===\n%s\n\n", weather)
+	}
+
+	// Today's schedule
+	b.WriteString("=== TODAY'S TRAINING SCHEDULE ===\n")
+	if len(todayEvents) == 0 {
+		b.WriteString("No training events scheduled for today.\n")
+	} else {
+		for _, e := range todayEvents {
+			graded := ""
+			if e.IsGraded {
+				graded = " [GRADED]"
+			}
+			fmt.Fprintf(&b, "- %s–%s: %s (%s)%s at %s | Lead: %s\n",
+				e.StartTime, e.EndTime, e.Title, e.Code, graded, e.Location, e.LeadInstructor)
+		}
+	}
+	b.WriteString("\n")
+
+	// This week's events
+	b.WriteString("=== THIS WEEK'S REMAINING EVENTS ===\n")
+	if len(weekEvents) == 0 {
+		b.WriteString("No further events this week.\n")
+	} else {
+		shown := 0
+		for _, e := range weekEvents {
+			if e.StartDate == today {
+				continue // already shown above
+			}
+			graded := ""
+			if e.IsGraded {
+				graded = " [GRADED]"
+			}
+			fmt.Fprintf(&b, "- %s %s–%s: %s (%s)%s | %s\n",
+				e.StartDate, e.StartTime, e.EndTime, e.Title, e.Code, graded, e.LeadInstructor)
+			shown++
+			if shown >= 10 {
+				fmt.Fprintf(&b, "  ...and %d more events this week\n", len(weekEvents)-shown-len(todayEvents))
+				break
+			}
+		}
+	}
+	b.WriteString("\n")
+
+	// Student overview
+	fmt.Fprintf(&b, "=== STUDENT OVERVIEW ===\n"+
+		"Active: %d | Avg Composite: %.1f | At-Risk: %d (%.1f%%)\n"+
+		"By Phase: %v\nBy Third: %v\n\n",
+		stats.ActiveStudents, stats.AvgComposite,
+		stats.AtRiskCount, stats.AtRiskPercent,
+		stats.ByPhase, stats.ByStandingThird)
+
+	// At-risk students (ALL of them) — WITH NAMES for XO
+	b.WriteString("=== AT-RISK STUDENTS ===\n")
+	if len(atRiskStudents) == 0 {
+		b.WriteString("No students currently at-risk.\n")
+	} else {
+		b.WriteString("Name                     | ID       | Rank   | Acad  | MilSk | Ldr   | OvAll | Trend | Flags\n")
+		b.WriteString("-------------------------|----------|--------|-------|-------|-------|-------|-------|------\n")
+		for _, s := range atRiskStudents {
+			flags := strings.Join(s.RiskFlags, ", ")
+			if flags == "" {
+				if s.AcademicComposite < 75 {
+					flags = "acad<75"
+				} else if s.LeadershipComposite < 75 {
+					flags = "ldr<75"
+				} else if s.MilSkillsComposite < 75 {
+					flags = "mil<75"
+				} else {
+					flags = "trend/composite"
+				}
+			}
+			name := fmt.Sprintf("%s %s, %s", s.Rank, s.LastName, s.FirstName)
+			fmt.Fprintf(&b, "%-24s | %-8s | %-6s | %5.1f | %5.1f | %5.1f | %5.1f | %-5s | %s\n",
+				name, s.ID, s.Rank, s.AcademicComposite, s.MilSkillsComposite,
+				s.LeadershipComposite, s.OverallComposite, s.Trend, flags)
+		}
+	}
+	b.WriteString("\n")
+
+	// Qualification status
+	fmt.Fprintf(&b, "=== QUALIFICATION STATUS ===\n"+
+		"Total: %d | Expired: %d | Critical (30d): %d | Warning (60d): %d | Caution (90d): %d | Current: %d\n",
+		qualStats.TotalRecords, qualStats.ExpiredCount,
+		qualStats.Expiring30, qualStats.Expiring60, qualStats.Expiring90, qualStats.CurrentCount)
+	if len(qualStats.CoverageGaps) > 0 {
+		b.WriteString("\nCoverage Gaps:\n")
+		for _, g := range qualStats.CoverageGaps {
+			fmt.Fprintf(&b, "- %s: %d qualified / %d required (GAP: %d)\n",
+				g.QualName, g.QualifiedCount, g.RequiredCount, g.Gap)
+		}
+	}
+	b.WriteString("\n")
+
+	// Instructor workload — WITH NAMES
+	b.WriteString("=== INSTRUCTOR WORKLOAD ===\n")
+	for _, inst := range instructors {
+		flag := ""
+		if inst.EventsThisWeek >= 4 {
+			flag = " [HIGH LOAD]"
+		}
+		if inst.CounselingsOverdue > 0 {
+			flag += fmt.Sprintf(" [%d COUNSELINGS OVERDUE]", inst.CounselingsOverdue)
+		}
+		fmt.Fprintf(&b, "- %s %s (%s, %s): %d events/wk, %d events/mo, %d students%s\n",
+			inst.Rank, inst.LastName, inst.ID, inst.Role, inst.EventsThisWeek, inst.EventsThisMonth, inst.StudentsAssigned, flag)
+	}
+	b.WriteString("\n")
+
+	// Recent feedback
+	if len(recentFeedback) > 0 {
+		b.WriteString("=== RECENT EVENT FEEDBACK ===\n")
+		for _, fb := range recentFeedback {
+			safety := ""
+			if fb.HasSafetyConcern {
+				safety = " ⚠ SAFETY CONCERN"
+			}
+			fmt.Fprintf(&b, "- %s (%s, %s): Rating %.1f/5%s — Sustains: %s | Improves: %s\n",
+				fb.EventTitle, fb.EventCode, fb.EventDate,
+				fb.OverallRating, safety, fb.Sustains, fb.Improves)
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString(`FORMATTING RULES:
+- Use markdown: ## headers, **bold**, bullet lists, and tables for data
+- Always end briefings with "Anything else you'd like to drill into, sir?"
+- When discussing students, use their NAME and rank (e.g., "2ndLt Thompson") — you know these Marines
+- When discussing instructors, use their name (e.g., "SSgt Diaz")
+- When recommending actions, be specific: who, what, by when
+- For off-base appointments, proactively mention travel time and gate traffic considerations`)
+
+	return b.String()
 }
 
 const CounselingPromptSuffix = `

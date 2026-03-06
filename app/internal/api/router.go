@@ -4,18 +4,21 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"heywood-tbs/internal/ai"
 	"heywood-tbs/internal/data"
 )
 
 // Handler holds dependencies for all API handlers.
 type Handler struct {
-	store   *data.Store
-	chatSvc *ChatService
+	store      data.DataStore
+	chatSvc    *ChatService
+	weatherSvc *ai.WeatherService
+	dev        bool // development mode — relaxes Secure cookie flag for HTTP
 }
 
-// NewHandler creates a new API handler with the given data store and optional chat service.
-func NewHandler(store *data.Store, chatSvc *ChatService) *Handler {
-	return &Handler{store: store, chatSvc: chatSvc}
+// NewHandler creates a new API handler.
+func NewHandler(store data.DataStore, chatSvc *ChatService, weatherSvc *ai.WeatherService, dev bool) *Handler {
+	return &Handler{store: store, chatSvc: chatSvc, weatherSvc: weatherSvc, dev: dev}
 }
 
 // SetupRouter registers all API routes on the given mux.
