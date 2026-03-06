@@ -141,8 +141,8 @@ func (h *Handler) scheduleToCalendarEvents(role, company string, start, end time
 		events = append(events, models.CalendarEvent{
 			ID:          "sched-" + e.ID,
 			Title:       e.Title,
-			Start:       e.StartDate + "T" + e.StartTime,
-			End:         e.EndDate + "T" + e.EndTime,
+			Start:       e.StartDate + "T" + milToISO(e.StartTime),
+			End:         e.EndDate + "T" + milToISO(e.EndTime),
 			Location:    e.Location,
 			Description: e.Notes,
 			Source:      "tbs-schedule",
@@ -153,4 +153,15 @@ func (h *Handler) scheduleToCalendarEvents(role, company string, start, end time
 	}
 
 	return events
+}
+
+// milToISO converts military time "0700" to ISO "07:00:00".
+func milToISO(mil string) string {
+	if len(mil) == 4 {
+		return mil[:2] + ":" + mil[2:] + ":00"
+	}
+	if len(mil) == 3 {
+		return "0" + mil[:1] + ":" + mil[1:] + ":00"
+	}
+	return mil
 }
