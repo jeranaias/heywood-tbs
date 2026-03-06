@@ -245,6 +245,12 @@ export function SettingsPage() {
           {/* Excel Upload */}
           {settings.dataSource.type === 'excel' && (
             <div className="space-y-4 mt-4">
+              {systemInfo.authMode === 'demo' && (
+                <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span><strong>Demo mode active.</strong> Do not upload real student PII. Data uploaded here is not encrypted and will be visible to anyone with access to this instance. Use demo data for evaluation, then configure a secure database before uploading real rosters.</span>
+                </div>
+              )}
               <div className="border-2 border-dashed border-blue-200 bg-blue-50/50 rounded-lg p-6 text-center">
                 <Upload className="w-8 h-8 text-blue-400 mx-auto mb-2" />
                 <p className="text-sm text-slate-700 font-medium mb-1">Upload your roster spreadsheet</p>

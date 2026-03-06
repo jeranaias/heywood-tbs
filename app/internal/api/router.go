@@ -87,6 +87,21 @@ func SetupRouter(h *Handler) *http.ServeMux {
 	mux.HandleFunc("POST /api/v1/settings/upload/preview", h.handleUploadPreview)
 	mux.HandleFunc("GET /api/v1/settings/system-info", h.handleSystemInfo)
 
+	// Microsoft Graph integrations (XO/Staff only)
+	mux.HandleFunc("POST /api/v1/graph/test", h.handleGraphTest)
+
+	// SharePoint
+	mux.HandleFunc("GET /api/v1/sharepoint/site", h.handleSharePointSite)
+	mux.HandleFunc("GET /api/v1/sharepoint/lists", h.handleSharePointLists)
+	mux.HandleFunc("GET /api/v1/sharepoint/list-items", h.handleSharePointListItems)
+	mux.HandleFunc("GET /api/v1/sharepoint/drives", h.handleSharePointDrives)
+	mux.HandleFunc("GET /api/v1/sharepoint/files", h.handleSharePointFiles)
+
+	// Teams
+	mux.HandleFunc("GET /api/v1/teams", h.handleTeamsList)
+	mux.HandleFunc("GET /api/v1/teams/channels", h.handleTeamsChannels)
+	mux.HandleFunc("GET /api/v1/teams/files", h.handleTeamsFiles)
+
 	return mux
 }
 

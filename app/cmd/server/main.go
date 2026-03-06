@@ -10,8 +10,10 @@ import (
 	"heywood-tbs/internal/ai"
 	"heywood-tbs/internal/api"
 	"heywood-tbs/internal/auth"
+	"heywood-tbs/internal/calendar"
 	"heywood-tbs/internal/data"
 	"heywood-tbs/internal/middleware"
+	"heywood-tbs/internal/msgraph"
 )
 
 func main() {
@@ -55,6 +57,31 @@ func main() {
 
 	// Initialize settings
 	api.InitSettings(*dataDir)
+
+	// Initialize Microsoft Graph client (for Outlook, SharePoint, Teams)
+	graphTenantID := os.Getenv("GRAPH_TENANT_ID")
+	graphClientID := os.Getenv("GRAPH_CLIENT_ID")
+	graphClientSecret := os.Getenv("GRAPH_CLIENT_SECRET")
+	graphCloud := os.Getenv("GRAPH_CLOUD") // "commercial", "gcc-high", "dod"
+	if graphCloud == "" {
+		graphCloud = "commercial"
+	}
+
+	if graphTenantID != "" && graphClientID != "" && graphClientSecret != "" {
+		graphClient := msgraph.NewClient(graphTenantID, graphClientID, graphClientSecret, graphCloud)
+		masterCalID := os.Getenv("GRAPH_MASTER_CALENDAR_ID")
+
+		// Wire up real Outlook calendar
+		outlookCal := calendar.NewOutlookCalendar(graphClient, masterCalID, nil)
+		api.InitCalendar(outlookCal)
+
+		// Wire up SharePoint and Teams services
+		api.InitGraph(graphClient)
+
+		slog.Info("Microsoft Graph connected", "cloud", graphCloud, "tenantID", graphTenantID[:8]+"...")
+	} else {
+		slog.Info("Microsoft Graph not configured — using mock calendar/mail")
+	}
 
 	// Build handler and router
 	handler := api.NewHandler(store, chatSvc, weatherSvc, newsSvc, trafficSvc, authProvider, *dev)

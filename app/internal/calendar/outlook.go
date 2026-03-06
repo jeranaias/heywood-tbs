@@ -1,9 +1,11 @@
 package calendar
 
 import (
+	"log/slog"
 	"time"
 
 	"heywood-tbs/internal/models"
+	"heywood-tbs/internal/msgraph"
 )
 
 // CalendarProvider abstracts calendar data retrieval.
@@ -15,41 +17,86 @@ type CalendarProvider interface {
 }
 
 // OutlookCalendar connects to Microsoft Graph API for real calendar/mail data.
-// This is a stub — full implementation requires msgraph-sdk-go dependency.
 type OutlookCalendar struct {
-	TenantID string
-	ClientID string
-	Cloud    string // "commercial", "gcc-high", "dod"
+	calSvc          *msgraph.CalendarService
+	mailSvc         *msgraph.MailService
+	masterCalID     string // shared master calendar ID (optional)
+	userLookup      func(role, company string) string // resolves role → Graph user ID
+}
+
+// NewOutlookCalendar creates a production calendar provider backed by Microsoft Graph.
+// graphClient: authenticated Graph API client
+// masterCalID: optional shared calendar ID for battalion-wide events
+// userLookup: function that maps (role, company) → user principal name for Graph queries
+func NewOutlookCalendar(graphClient *msgraph.Client, masterCalID string, userLookup func(role, company string) string) *OutlookCalendar {
+	return &OutlookCalendar{
+		calSvc:      msgraph.NewCalendarService(graphClient),
+		mailSvc:     msgraph.NewMailService(graphClient),
+		masterCalID: masterCalID,
+		userLookup:  userLookup,
+	}
 }
 
 // GetEvents retrieves calendar events from Outlook via Microsoft Graph.
-// TODO: implement with msgraph-sdk-go when dependency is added.
+// Merges personal calendar + shared master calendar (if configured).
 func (o *OutlookCalendar) GetEvents(role, company string, start, end time.Time) []models.CalendarEvent {
-	// Stub: returns empty until Graph SDK is integrated
-	return nil
+	var all []models.CalendarEvent
+
+	// Get personal calendar events
+	userID := o.resolveUser(role, company)
+	if userID != "" {
+		events, err := o.calSvc.GetEvents(userID, start, end)
+		if err != nil {
+			slog.Error("Outlook calendar query failed", "role", role, "user", userID, "error", err)
+		} else {
+			all = append(all, events...)
+		}
+	}
+
+	// Get shared/master calendar events (if configured)
+	if o.masterCalID != "" {
+		shared, err := o.calSvc.GetSharedCalendar(o.masterCalID, start, end)
+		if err != nil {
+			slog.Error("shared calendar query failed", "calendarID", o.masterCalID, "error", err)
+		} else {
+			all = append(all, shared...)
+		}
+	}
+
+	return all
 }
 
-// GetMailSummary retrieves unread/recent mail from Outlook via Microsoft Graph.
-// TODO: implement with msgraph-sdk-go when dependency is added.
+// GetMailSummary retrieves recent emails from Outlook via Microsoft Graph.
 func (o *OutlookCalendar) GetMailSummary(role string) []models.MailSummary {
-	// Stub: returns empty until Graph SDK is integrated
-	return nil
+	userID := o.resolveUser(role, "")
+	if userID == "" {
+		return nil
+	}
+
+	mails, err := o.mailSvc.GetMailSummary(userID, false)
+	if err != nil {
+		slog.Error("Outlook mail query failed", "role", role, "user", userID, "error", err)
+		return nil
+	}
+
+	return mails
 }
 
 // CreateEvent creates a calendar event in Outlook via Microsoft Graph.
-// TODO: implement with msgraph-sdk-go when dependency is added.
 func (o *OutlookCalendar) CreateEvent(event models.CalendarEvent) (models.CalendarEvent, error) {
-	return event, nil
+	// Use a default user for event creation; in production this would be
+	// the authenticated user's UPN from the CAC certificate.
+	userID := o.resolveUser("staff", "")
+	if userID == "" {
+		return event, nil
+	}
+
+	return o.calSvc.CreateEvent(userID, event)
 }
 
-// GraphEndpoint returns the Microsoft Graph base URL for the configured cloud.
-func (o *OutlookCalendar) GraphEndpoint() string {
-	switch o.Cloud {
-	case "gcc-high":
-		return "https://graph.microsoft.us"
-	case "dod":
-		return "https://dod-graph.microsoft.us"
-	default:
-		return "https://graph.microsoft.com"
+func (o *OutlookCalendar) resolveUser(role, company string) string {
+	if o.userLookup != nil {
+		return o.userLookup(role, company)
 	}
+	return ""
 }
