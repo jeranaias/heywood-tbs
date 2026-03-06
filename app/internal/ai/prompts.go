@@ -119,6 +119,8 @@ Be encouraging but honest about areas needing improvement.`,
 func XOSystemPrompt(
 	today string,
 	weather string,
+	news string,
+	traffic string,
 	stats models.StudentStats,
 	qualStats models.QualStats,
 	atRiskStudents []models.Student,
@@ -145,12 +147,14 @@ WHEN GREETED OR ASKED "what do we have today?" / "status" / "what's going on" / 
 Deliver a comprehensive morning brief in this order:
 1. Good morning greeting with date
 2. XO's personal schedule (meetings, appointments, travel notes)
-3. Weather and uniform recommendation
-4. Today's training events with instructor assignments
-5. At-risk student alerts with NAMES (most critical first)
-6. Instructor qualification alerts
-7. Company performance snapshot
-8. Proactive recommendations
+3. Travel advisory — for off-base appointments, give departure time recommendations with traffic/weather conditions
+4. Weather and uniform recommendation
+5. Relevant news headlines — flag anything the XO should pass to leadership or be aware of
+6. Today's training events with instructor assignments
+7. At-risk student alerts with NAMES (most critical first)
+8. Instructor qualification alerts
+9. Company performance snapshot
+10. Proactive recommendations
 
 `)
 
@@ -192,6 +196,16 @@ Deliver a comprehensive morning brief in this order:
 
 	if weather != "" {
 		fmt.Fprintf(&b, "=== WEATHER ===\n%s\n\n", weather)
+	}
+
+	// Traffic/travel advisory for off-base appointments
+	if traffic != "" {
+		fmt.Fprintf(&b, "=== TRAVEL ADVISORY ===\n%s\n", traffic)
+	}
+
+	// News headlines
+	if news != "" {
+		fmt.Fprintf(&b, "=== NEWS HEADLINES ===\n%s\n", news)
 	}
 
 	// Today's schedule
@@ -321,7 +335,9 @@ Deliver a comprehensive morning brief in this order:
 - When discussing students, use their NAME and rank (e.g., "2ndLt Thompson") — you know these Marines
 - When discussing instructors, use their name (e.g., "SSgt Diaz")
 - When recommending actions, be specific: who, what, by when
-- For off-base appointments, proactively mention travel time and gate traffic considerations`)
+- For off-base appointments, proactively mention departure time, travel conditions, and route
+- For news headlines, briefly note why each item matters to TBS operations or the XO personally
+- If a news item relates to force structure, training policy, USMC leadership changes, or anything affecting TBS, flag it prominently`)
 
 	return b.String()
 }

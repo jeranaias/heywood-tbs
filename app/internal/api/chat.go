@@ -18,6 +18,20 @@ import (
 	openai "github.com/sashabaranov/go-openai"
 )
 
+// eastern is the US Eastern timezone for Quantico, VA.
+var eastern *time.Location
+
+func init() {
+	var err error
+	eastern, err = time.LoadLocation("America/New_York")
+	if err != nil {
+		eastern = time.FixedZone("EST", -5*3600)
+	}
+}
+
+// nowET returns the current time in Eastern timezone.
+func nowET() time.Time { return time.Now().In(eastern) }
+
 // ChatService manages OpenAI/Azure OpenAI API interactions.
 type ChatService struct {
 	client     *openai.Client
@@ -215,16 +229,37 @@ func (h *Handler) buildChatContext(role, company, studentID, message string) (sy
 	switch role {
 	case "xo":
 		// XO gets EVERYTHING in the system prompt — full brief mode
-		today := time.Now().Format("2006-01-02")
+		today := nowET().Format("2006-01-02")
 
+		// Fetch live weather
 		var weatherStr string
+		var weatherData *ai.WeatherData
 		if h.weatherSvc != nil {
 			if wd, err := h.weatherSvc.Get(); err == nil {
+				weatherData = wd
 				weatherStr = ai.FormatWeatherForPrompt(wd)
 			} else {
 				slog.Error("weather fetch failed", "error", err)
 				weatherStr = "Weather data temporarily unavailable."
 			}
+		}
+
+		// Fetch live news headlines
+		var newsStr string
+		if h.newsSvc != nil {
+			if items, err := h.newsSvc.Get(); err == nil {
+				newsStr = ai.FormatNewsForPrompt(items)
+			} else {
+				slog.Error("news fetch failed", "error", err)
+			}
+		}
+
+		// Calculate real traffic/routes for off-base appointments
+		xoSchedule := h.store.XOScheduleForDate(today)
+		var trafficStr string
+		if h.trafficSvc != nil {
+			routes := h.trafficSvc.CalculateRoutes(xoSchedule, weatherData)
+			trafficStr = ai.FormatTrafficForPrompt(routes)
 		}
 
 		stats := h.store.StudentStats("")
@@ -234,10 +269,9 @@ func (h *Handler) buildChatContext(role, company, studentID, message string) (sy
 		weekEvents := h.store.ThisWeekSchedule(today)
 		recentFeedback := h.store.RecentFeedback(10)
 		instructors := h.store.ListInstructors("")
-		xoSchedule := h.store.XOScheduleForDate(today)
 
 		systemPrompt = ai.XOSystemPrompt(
-			today, weatherStr, stats, qualStats,
+			today, weatherStr, newsStr, trafficStr, stats, qualStats,
 			atRisk, todayEvents, weekEvents,
 			recentFeedback, instructors, xoSchedule,
 		)
@@ -249,7 +283,7 @@ func (h *Handler) buildChatContext(role, company, studentID, message string) (sy
 		systemPrompt = ai.StaffSystemPrompt(stats)
 
 		// Always inject today's schedule + at-risk summary so Heywood can answer proactively
-		today := time.Now().Format("2006-01-02")
+		today := nowET().Format("2006-01-02")
 		var ctxParts []string
 
 		// Today's schedule — always relevant
@@ -304,7 +338,7 @@ func (h *Handler) buildChatContext(role, company, studentID, message string) (sy
 		systemPrompt = ai.SPCSystemPrompt(stats, company)
 
 		// Always inject today's schedule + company at-risk
-		today := time.Now().Format("2006-01-02")
+		today := nowET().Format("2006-01-02")
 		var ctxParts []string
 
 		todayEvents := h.store.TodaySchedule(today)
@@ -353,7 +387,7 @@ func (h *Handler) buildChatContext(role, company, studentID, message string) (sy
 		systemPrompt = ai.StudentSystemPrompt(student)
 
 		// Inject today's schedule + the student's own data
-		today := time.Now().Format("2006-01-02")
+		today := nowET().Format("2006-01-02")
 		var ctxParts []string
 
 		todayEvents := h.store.TodaySchedule(today)
@@ -393,7 +427,7 @@ func (h *Handler) mockResponse(role, company, studentID, message string) string 
 		stats := h.store.StudentStats("")
 		qualStats := h.store.QualStats()
 		atRisk := h.store.AtRiskStudents("")
-		today := time.Now().Format("Monday, January 2, 2006")
+		today := nowET().Format("Monday, January 2, 2006")
 
 		if len(message) < 30 || containsAny(msg, "today", "status", "brief", "morning", "what") {
 			return fmt.Sprintf("## Good morning, sir. Heywood online.\n\n"+

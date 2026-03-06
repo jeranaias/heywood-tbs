@@ -49,8 +49,17 @@ func (w *WeatherService) Get() (*WeatherData, error) {
 }
 
 func fetchWeather() (*WeatherData, error) {
+	// Open-Meteo: free, no API key, works from any datacenter
+	// Quantico, VA: 38.52°N, 77.29°W
+	const url = "https://api.open-meteo.com/v1/forecast?" +
+		"latitude=38.52&longitude=-77.29" +
+		"&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m" +
+		"&daily=temperature_2m_max,temperature_2m_min" +
+		"&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%2FNew_York" +
+		"&forecast_days=1"
+
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get("https://wttr.in/Quantico,VA?format=j1")
+	resp, err := client.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("weather fetch: %w", err)
 	}
@@ -61,48 +70,75 @@ func fetchWeather() (*WeatherData, error) {
 	}
 
 	var result struct {
-		CurrentCondition []struct {
-			TempF      string `json:"temp_F"`
-			FeelsLikeF string `json:"FeelsLikeF"`
-			WeatherDesc []struct {
-				Value string `json:"value"`
-			} `json:"weatherDesc"`
-			WindspeedMiles string `json:"windspeedMiles"`
-			Winddir16Point string `json:"winddir16Point"`
-			Humidity       string `json:"humidity"`
-		} `json:"current_condition"`
-		Weather []struct {
-			MaxTempF string `json:"maxtempF"`
-			MinTempF string `json:"mintempF"`
-		} `json:"weather"`
+		Current struct {
+			Temp       float64 `json:"temperature_2m"`
+			FeelsLike  float64 `json:"apparent_temperature"`
+			Humidity   int     `json:"relative_humidity_2m"`
+			WeatherCode int    `json:"weather_code"`
+			WindSpeed  float64 `json:"wind_speed_10m"`
+			WindDir    float64 `json:"wind_direction_10m"`
+		} `json:"current"`
+		Daily struct {
+			TempMax []float64 `json:"temperature_2m_max"`
+			TempMin []float64 `json:"temperature_2m_min"`
+		} `json:"daily"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("weather parse: %w", err)
 	}
 
-	if len(result.CurrentCondition) == 0 {
-		return nil, fmt.Errorf("weather: no current conditions")
-	}
-
-	cc := result.CurrentCondition[0]
 	wd := &WeatherData{
-		TempF:      atoi(cc.TempF),
-		FeelsLikeF: atoi(cc.FeelsLikeF),
-		WindMPH:    atoi(cc.WindspeedMiles),
-		WindDir:    cc.Winddir16Point,
-		Humidity:   atoi(cc.Humidity),
+		TempF:      int(result.Current.Temp),
+		FeelsLikeF: int(result.Current.FeelsLike),
+		Condition:  wmoCodeToCondition(result.Current.WeatherCode),
+		WindMPH:    int(result.Current.WindSpeed),
+		WindDir:    degreesToCardinal(result.Current.WindDir),
+		Humidity:   result.Current.Humidity,
 		FetchedAt:  time.Now(),
 	}
-	if len(cc.WeatherDesc) > 0 {
-		wd.Condition = cc.WeatherDesc[0].Value
+	if len(result.Daily.TempMax) > 0 {
+		wd.ForecastHi = int(result.Daily.TempMax[0])
 	}
-	if len(result.Weather) > 0 {
-		wd.ForecastHi = atoi(result.Weather[0].MaxTempF)
-		wd.ForecastLo = atoi(result.Weather[0].MinTempF)
+	if len(result.Daily.TempMin) > 0 {
+		wd.ForecastLo = int(result.Daily.TempMin[0])
 	}
 
 	return wd, nil
+}
+
+// wmoCodeToCondition converts WMO weather codes to human-readable conditions.
+func wmoCodeToCondition(code int) string {
+	switch {
+	case code == 0:
+		return "Clear sky"
+	case code <= 3:
+		return "Partly cloudy"
+	case code <= 49:
+		return "Fog"
+	case code <= 59:
+		return "Drizzle"
+	case code <= 69:
+		return "Rain"
+	case code <= 79:
+		return "Snow"
+	case code <= 82:
+		return "Rain showers"
+	case code <= 86:
+		return "Snow showers"
+	case code <= 99:
+		return "Thunderstorm"
+	default:
+		return "Unknown"
+	}
+}
+
+// degreesToCardinal converts wind direction degrees to 16-point compass.
+func degreesToCardinal(deg float64) string {
+	dirs := []string{"N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+		"S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"}
+	idx := int((deg + 11.25) / 22.5) % 16
+	return dirs[idx]
 }
 
 // FormatWeatherForPrompt formats weather data for injection into a system prompt.

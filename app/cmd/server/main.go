@@ -39,11 +39,13 @@ func main() {
 		slog.Warn("No AI API keys configured — using mock responses")
 	}
 
-	// Initialize weather service
+	// Initialize live data services
 	weatherSvc := &ai.WeatherService{}
+	newsSvc := &ai.NewsService{}
+	trafficSvc := &ai.TrafficService{}
 
 	// Build handler and router
-	handler := api.NewHandler(store, chatSvc, weatherSvc, *dev)
+	handler := api.NewHandler(store, chatSvc, weatherSvc, newsSvc, trafficSvc, *dev)
 	mux := api.SetupRouter(handler)
 
 	// Serve static files in production (embedded SPA)

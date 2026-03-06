@@ -13,12 +13,14 @@ type Handler struct {
 	store      data.DataStore
 	chatSvc    *ChatService
 	weatherSvc *ai.WeatherService
+	newsSvc    *ai.NewsService
+	trafficSvc *ai.TrafficService
 	dev        bool // development mode — relaxes Secure cookie flag for HTTP
 }
 
 // NewHandler creates a new API handler.
-func NewHandler(store data.DataStore, chatSvc *ChatService, weatherSvc *ai.WeatherService, dev bool) *Handler {
-	return &Handler{store: store, chatSvc: chatSvc, weatherSvc: weatherSvc, dev: dev}
+func NewHandler(store data.DataStore, chatSvc *ChatService, weatherSvc *ai.WeatherService, newsSvc *ai.NewsService, trafficSvc *ai.TrafficService, dev bool) *Handler {
+	return &Handler{store: store, chatSvc: chatSvc, weatherSvc: weatherSvc, newsSvc: newsSvc, trafficSvc: trafficSvc, dev: dev}
 }
 
 // SetupRouter registers all API routes on the given mux.

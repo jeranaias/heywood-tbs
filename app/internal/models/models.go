@@ -194,6 +194,8 @@ type XOScheduleItem struct {
 	EndTime   string   `json:"endTime"`
 	Location  string   `json:"location"`
 	OnBase    bool     `json:"onBase"`
+	Latitude  float64  `json:"latitude,omitempty"`  // for off-base routing
+	Longitude float64  `json:"longitude,omitempty"` // for off-base routing
 	Attendees []string `json:"attendees"`
 	Agenda    string   `json:"agenda"`
 	Notes     string   `json:"notes"`
