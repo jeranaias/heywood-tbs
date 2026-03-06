@@ -1,190 +1,208 @@
-# Heywood — TBS Digital Staff Officer
+# Heywood — Digital Staff Officer for The Basic School
 
-**Classification:** UNCLASSIFIED // Distribution Unlimited
+> *"Good Morning, Sir. Here's your brief for March 6, 2026."*
 
-A role-adaptive AI agent for The Basic School (TBS), Quantico. Heywood functions as a Digital Staff Officer — surfacing student performance data, managing tasks, syncing calendars and mail, and answering doctrine questions through natural conversation. Built on platforms authorized inside MCEN.
+Every morning at TBS, staff officers spend 30-60 minutes piecing together the day — pulling student data from spreadsheets, checking the training schedule, reviewing at-risk lists, scanning email for updates. Heywood does it in 3 seconds.
 
-**Live Demo:** [heywood-tbs.nicefield-9a8db973.eastus.azurecontainerapps.io](https://heywood-tbs.nicefield-9a8db973.eastus.azurecontainerapps.io/)
+Heywood is an AI-powered Digital Staff Officer that gives every Marine at The Basic School — from the XO to individual students — instant, role-appropriate access to the data they need. No spreadsheet hunting. No email chains. Just ask.
 
-## What It Does
+**[Live Demo](https://heywood-tbs.nicefield-9a8db973.eastus.azurecontainerapps.io/)** — try it now, no login required
 
-| Capability | Description |
-|-----------|-------------|
-| **AI Chat** | Conversational access to student data, schedules, quals, and doctrine. Tool-use enabled — Heywood can look up students, check calendars, search the web, and create tasks from natural language. |
-| **Role-Based Views** | XO sees battalion-wide analytics. Staff sees company dashboards. Students see their own record. All from the same app. |
-| **Student Analytics** | 200-student roster with GPA, PFT/CFT, rifle qual, conduct, peer evals. At-risk identification with configurable thresholds. |
-| **Task Management** | Heywood creates actionable tasks from conversation ("Draft counseling for Lt Smith" becomes a tracked task). Priority, status, assignment. |
-| **Calendar & Mail** | Microsoft Outlook integration via Graph API. Personal calendar + master TBS schedule overlay. Mail summaries with unread count. Demo mode generates mock events. |
-| **Instructor Quals** | Qualification tracking across 12 TBS-specific quals. Expiration monitoring, readiness percentages, gap identification. |
-| **Settings & Config** | Web-based admin panel for data sources, AI provider, Outlook sync, and database connections. No CLI required. |
+---
+
+## One Question, Full Situational Awareness
+
+Ask Heywood for a morning brief and it pulls from every data source simultaneously — student performance, today's schedule, qualification gaps, weather, news, and your calendar — then delivers it in seconds, tailored to your role.
+
+![XO Morning Brief](screenshots/chat-morning-brief.png)
+
+*The XO gets the full picture: schedule with travel advisories, weather and uniform call, at-risk students ranked by severity, qualification gaps by type, and proactive recommendations — all from a single question.*
+
+---
+
+## Role-Adaptive Views
+
+Same app, different experience. Heywood automatically adjusts what you see based on who you are.
+
+| Role | What They See |
+|------|--------------|
+| **Executive Officer** | Battalion-wide analytics, all companies, master calendar, full at-risk visibility |
+| **Staff Officer** | TBS-wide data access, training schedule, instructor qualifications |
+| **SPC (Company)** | Company-scoped student roster, company training events |
+| **Student** | Personal record only — grades, schedule, upcoming quals |
+
+---
+
+## What's Inside
+
+### Student Performance Dashboard
+200-student roster with composite scoring across Academics, Military Skills, and Leadership. Class rank, phase tracking, trend indicators, and status flags (Active, At Risk, Academic Hold, Medical Hold).
+
+![Dashboard](screenshots/dashboard.png)
+
+### At-Risk Identification
+Automatic flagging when any pillar drops below 75 or trends negative. 97 students flagged in the demo dataset — sortable, searchable, with direct drill-down to individual records.
+
+![At-Risk Students](screenshots/at-risk.png)
+
+### AI Chat with Tool Use
+Heywood doesn't just generate text — it queries live data. Ask "How is 2ndLt Perez doing?" and it pulls the actual student record. Ask "What's on my schedule?" and it checks the calendar API. 12 tools available:
+
+- `lookup_student` / `search_students` — find and analyze student data
+- `get_at_risk` / `get_student_stats` — performance analytics
+- `get_schedule` / `lookup_calendar` — training and personal schedule
+- `get_qual_records` / `get_qual_stats` — instructor qualification tracking
+- `web_search` — doctrine references, regulations, current info
+- `create_task` — turn conversation into tracked action items
+
+### Student Roster
+Full searchable, sortable, paginated roster. Filter by phase, at-risk status, or search by name/ID. Click any student for detailed performance breakdown.
+
+![Students](screenshots/students.png)
+
+### Admin Settings
+Web-based configuration — no CLI, no config files. Data source selection, AI provider status, Outlook integration toggle, database connections. Guided setup wizard with progress tracking.
+
+![Settings](screenshots/settings.png)
+
+### Additional Pages
+- **Instructor Quals** — 12 TBS-specific qualifications tracked per instructor. Expiration monitoring, coverage gap analysis, readiness percentages.
+- **Training Schedule** — Full TBS schedule with event types, locations, lead instructors, graded/ungraded status.
+- **My Calendar** — Personal + master calendar overlay. Demo mode generates realistic mock events.
+- **Task Inbox** — AI-generated tasks from conversation, with priority, status, and assignment tracking.
+
+---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│                   React SPA                      │
-│  Dashboard · Chat · Students · Calendar · Tasks  │
-│  At-Risk · Quals · Schedule · Settings           │
-├─────────────────────────────────────────────────┤
-│              Go HTTP Server (stdlib)              │
-│  REST API · Auth Middleware · Role Filtering      │
-├──────────┬──────────┬───────────┬───────────────┤
-│ DataStore│ AI/Chat  │ MS Graph  │ Auth Provider  │
-│ Interface│ Service  │ Client    │ Interface      │
-├──────────┼──────────┼───────────┼───────────────┤
-│ JSON     │ OpenAI   │ Outlook   │ Demo (cookie)  │
-│ SQLite   │ Azure    │ SharePoint│ CAC/PKI (x509) │
-│ Postgres │ OpenAI   │ Teams     │                │
-│ Excel    │          │           │                │
-└──────────┴──────────┴───────────┴───────────────┘
+┌─────────────────────────────────────────────────────┐
+│                    React SPA (Vite)                   │
+│   11 Pages · Tailwind CSS · Role-Adaptive Routing    │
+├─────────────────────────────────────────────────────┤
+│               Go HTTP Server (net/http)               │
+│   35+ REST Endpoints · Auth Middleware · FIPS 140-3   │
+├───────────┬───────────┬────────────┬────────────────┤
+│ DataStore │  AI Chat  │  MS Graph  │  Auth Provider  │
+│ Interface │  Service  │  Client    │  Interface      │
+├───────────┼───────────┼────────────┼────────────────┤
+│ JSON      │ OpenAI    │ Calendar   │ Demo (cookie)   │
+│ SQLite    │ Azure     │ Mail       │ CAC/PKI (x509)  │
+│ PostgreSQL│ OpenAI    │ SharePoint │                  │
+│ Excel     │           │ Teams      │                  │
+└───────────┴───────────┴────────────┴────────────────┘
 ```
 
-## Tech Stack
+**Frontend:** React 18, TypeScript, Tailwind CSS, Vite
+**Backend:** Go 1.24, stdlib net/http, FIPS 140-3 native crypto (no BoringCrypto/CGO)
+**AI:** OpenAI GPT-4o or Azure OpenAI — auto-detected from environment
+**Database:** JSON (demo) / SQLite (recommended) / PostgreSQL (production)
+**Microsoft 365:** Graph API — Outlook, SharePoint, Teams (commercial + GCC High + DoD clouds)
+**Auth:** Demo role picker or CAC/PKI via X.509 client certificates
+**Deployment:** Multi-stage Docker, Azure Container Apps, Azure Gov IL5 ready
 
-| Layer | Technology |
-|-------|-----------|
-| **Frontend** | React 18, TypeScript, Tailwind CSS, Vite |
-| **Backend** | Go 1.24, net/http (stdlib), FIPS 140-3 crypto |
-| **AI** | OpenAI GPT-4o or Azure OpenAI (auto-detected from env) |
-| **Database** | JSON (demo), SQLite (recommended), PostgreSQL (production) |
-| **Microsoft 365** | Graph API — Outlook calendar/mail, SharePoint, Teams |
-| **Auth** | Demo role picker or CAC/PKI (X.509 client certs) |
-| **Deployment** | Docker multi-stage, Azure Container Apps, Azure Gov IL5 ready |
-| **Search** | SearXNG (self-hosted, optional) |
-
-## Project Structure
-
-```
-heywood-tbs/
-├── app/
-│   ├── cmd/server/          # Entry point
-│   ├── internal/
-│   │   ├── ai/              # Chat service, tool definitions, weather/news/traffic
-│   │   ├── api/             # REST handlers, router, settings, graph endpoints
-│   │   ├── auth/            # IdentityProvider interface, Demo + CAC providers
-│   │   ├── calendar/        # CalendarProvider interface, Outlook + Mock impls
-│   │   ├── data/            # DataStore interface, JSON/SQL/Excel/Hybrid stores
-│   │   ├── middleware/      # Auth, CORS, security headers
-│   │   ├── models/          # Shared types (Student, Task, CalendarEvent, etc.)
-│   │   └── msgraph/         # Microsoft Graph client (OAuth2, calendar, mail, SP, Teams)
-│   ├── web/
-│   │   └── src/
-│   │       ├── pages/       # 11 page components
-│   │       ├── components/  # Layout, sidebar, charts
-│   │       └── lib/         # API client, types, utilities
-│   ├── data/                # JSON seed data, settings, user roster
-│   ├── Dockerfile           # Multi-stage: node → go → alpine
-│   └── Makefile
-├── docs/                    # Build plan, phase details, briefs
-├── governance/              # PIA, compliance checklists, tool registry
-├── prompts/                 # 20 TBS-adapted prompt templates
-├── training/                # EDD course materials
-└── infrastructure/          # Azure deployment configs
-```
+---
 
 ## Data Sources
 
-Heywood reads student/instructor data from configurable backends. All implement the same 27-method `DataStore` interface — application code never knows which backend is active.
+Units track data differently. Heywood adapts to them — not the other way around.
 
-| Source | Best For | Setup |
-|--------|----------|-------|
-| **JSON Files** | Demo, development | Default — no config needed |
-| **SQLite** | Single-server production | Recommended — zero infrastructure, file-based |
-| **PostgreSQL** | Multi-server / MCEN cloud | Connection string in settings |
-| **Excel (.xlsx)** | Units transitioning from spreadsheets | Upload via admin page, auto-maps columns |
-| **Hybrid** | Real units | Reference data from Excel/SP, mutable data in SQLite |
+| Source | Best For | How It Works |
+|--------|----------|-------------|
+| **JSON** | Demo, dev | Default — ships with 200 synthetic students |
+| **SQLite** | Single-server | Zero config, file-based, recommended for most units |
+| **PostgreSQL** | MCEN cloud | Connection string, production-grade with pooling |
+| **Excel (.xlsx)** | Transitioning units | Upload via admin page, auto-maps column headers |
+| **SharePoint Lists** | Units already on SP | Connect via Graph API, maps lists to data types |
 
-**Mutable data** (tasks, messages, notifications) is isolated per backend. In demo mode, mutable data is in-memory only and resets on restart.
+All backends implement the same 27-method `DataStore` interface. Application code never knows which one is active. **Hybrid mode** lets units keep reference data in Excel while mutable data (tasks, messages) lives in SQLite.
+
+---
 
 ## Microsoft 365 Integration
 
-When configured with Graph API credentials, Heywood connects to:
+One set of Graph API credentials unlocks:
 
-- **Outlook Calendar** — Personal events + shared master calendar, role-filtered views
-- **Outlook Mail** — Unread count badge, recent message summaries
-- **SharePoint** — Site discovery, list browsing, document library file access
-- **Microsoft Teams** — Team listing, channel browsing, shared file access
+- **Outlook Calendar** — personal + shared master calendar, merged view
+- **Outlook Mail** — unread count, recent message summaries
+- **SharePoint** — site discovery, list browsing, document libraries, file access
+- **Teams** — team listing, channels, shared files
 
-Supports commercial Azure, GCC High, and DoD national cloud endpoints. Uses client credentials flow (app-only, `Sites.Selected` permission scope).
+Supports **commercial Azure**, **GCC High**, and **DoD** national cloud endpoints. Client credentials flow with `Sites.Selected` permission scope (passes MCEN security review).
 
-Set environment variables: `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`, `GRAPH_CLOUD` (commercial/gcc-high/dod).
+---
 
 ## Authentication
 
-| Mode | How | Set By |
-|------|-----|--------|
-| **Demo** | Cookie-based role picker (XO / Staff / SPC / Student) | Default |
-| **CAC/PKI** | X.509 client cert via `X-ARR-ClientCert` header → EDIPI extraction → role lookup from `user-roster.json` | `AUTH_MODE=cac` |
+| Mode | Mechanism | Use Case |
+|------|-----------|----------|
+| **Demo** | Cookie-based role picker | Evaluation, training, development |
+| **CAC/PKI** | X.509 cert → EDIPI → role lookup | Production on MCEN |
+
+Set `AUTH_MODE=cac` and provide a `user-roster.json` mapping EDIPIs to roles. Works behind Azure App Service with client certificate forwarding.
+
+---
 
 ## Quick Start
 
 ```bash
-# Clone and build
 cd app
-go mod download
-cd web && npm ci && npm run build && cd ..
+go mod download && cd web && npm ci && npm run build && cd ..
 go build -o heywood ./cmd/server
-
-# Run (demo mode — no config needed)
-./heywood -dev -port 8080
-
-# With AI (set one):
-OPENAI_API_KEY=sk-... ./heywood -dev
-# or
-AZURE_OPENAI_ENDPOINT=https://... AZURE_OPENAI_KEY=... AZURE_OPENAI_DEPLOYMENT=gpt-4o ./heywood -dev
+OPENAI_API_KEY=sk-... ./heywood -dev -port 8080
 ```
 
-Open `http://localhost:8080`. Pick a role. Start talking to Heywood.
+Open `http://localhost:8080`. Pick a role. Ask for a morning brief.
 
-## Docker
+### Docker
 
 ```bash
 cd app
 docker build -t heywood-tbs .
-docker run -p 8080:8080 \
-  -e OPENAI_API_KEY=sk-... \
-  heywood-tbs
+docker run -p 8080:8080 -e OPENAI_API_KEY=sk-... heywood-tbs
 ```
+
+---
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `OPENAI_API_KEY` | One AI provider | OpenAI API key |
-| `AZURE_OPENAI_ENDPOINT` | One AI provider | Azure OpenAI endpoint URL |
-| `AZURE_OPENAI_KEY` | One AI provider | Azure OpenAI API key |
-| `AZURE_OPENAI_DEPLOYMENT` | With Azure | Deployment name (e.g., gpt-4o) |
-| `AUTH_MODE` | No | `cac` for CAC/PKI auth, omit for demo |
+| `AZURE_OPENAI_ENDPOINT` | One AI provider | Azure OpenAI endpoint |
+| `AZURE_OPENAI_KEY` | With Azure | Azure OpenAI key |
+| `AZURE_OPENAI_DEPLOYMENT` | With Azure | Model deployment name |
+| `AUTH_MODE` | No | `cac` for CAC/PKI, omit for demo |
 | `GRAPH_TENANT_ID` | For M365 | Azure AD tenant ID |
 | `GRAPH_CLIENT_ID` | For M365 | App registration client ID |
-| `GRAPH_CLIENT_SECRET` | For M365 | App registration client secret |
-| `GRAPH_CLOUD` | No | `commercial` (default), `gcc-high`, `dod` |
-| `GRAPH_MASTER_CALENDAR_ID` | No | Shared calendar ID for TBS-wide events |
-| `SEARXNG_URL` | No | SearXNG instance URL for web search |
-
-## Codebase
-
-- **~8,400 lines Go** across 8 packages
-- **~4,400 lines TypeScript/React** across 11 pages
-- **27-method DataStore interface** with 5 backend implementations
-- **12 AI tools** for conversational data access
-- **FIPS 140-3** native crypto (Go 1.24, no BoringCrypto/CGO)
-
-## Foundation
-
-Built on [Expert-Driven Development (EDD)](https://github.com/jeranaias/expertdrivendevelopment) — a 5-course AI training curriculum with 51 prompt templates, governance SOP, and reusable templates for DoD AI adoption.
-
-## Authorization
-
-- **Demo/Dev:** No ATO required (runs on any machine)
-- **MCEN Deployment:** Azure Container Apps on Azure Gov, inherits FedRAMP High baseline. IATT for Azure OpenAI custom connector. Full ATO/cATO path documented.
-
-## Data Handling
-
-- **CUI:** Authorized on Azure OpenAI (IL5)
-- **PII:** Minimized by design, PIA required at each phase gate
-- **Classified:** Never authorized on any Heywood component
+| `GRAPH_CLIENT_SECRET` | For M365 | Client secret |
+| `GRAPH_CLOUD` | No | `commercial` / `gcc-high` / `dod` |
+| `GRAPH_MASTER_CALENDAR_ID` | No | Shared calendar for TBS-wide events |
+| `SEARXNG_URL` | No | SearXNG URL for web search |
 
 ---
 
-**Do not include classified, CUI, PII, or operationally sensitive information in this repository.**
+## By the Numbers
+
+- **~8,400 lines Go** across 8 packages
+- **~4,400 lines TypeScript/React** across 11 pages
+- **35+ REST API endpoints**
+- **27-method DataStore interface** with 5 backend implementations
+- **12 AI tools** for conversational data access
+- **4 Microsoft Graph integrations** (Calendar, Mail, SharePoint, Teams)
+- **3 cloud endpoints** supported (Commercial, GCC High, DoD)
+- **2 auth modes** (Demo + CAC/PKI)
+- **FIPS 140-3** compliant crypto, zero CGO dependencies
+- **Single Docker image** for commercial + Azure Gov
+
+---
+
+## Foundation
+
+Built on [Expert-Driven Development (EDD)](https://github.com/jeranaias/expertdrivendevelopment) — a 5-course AI training curriculum with 51 prompt templates and governance SOP for responsible DoD AI adoption.
+
+---
+
+**Classification:** UNCLASSIFIED // Distribution Unlimited
+
+Do not include classified, CUI, PII, or operationally sensitive information in this repository. All student data is synthetic.
