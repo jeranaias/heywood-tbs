@@ -71,6 +71,21 @@ func SetupRouter(h *Handler) *http.ServeMux {
 	mux.HandleFunc("GET /api/v1/auth/me", h.handleAuthMe)
 	mux.HandleFunc("POST /api/v1/auth/switch", h.handleAuthSwitch)
 
+	// Calendar
+	mux.HandleFunc("GET /api/v1/calendar/events", h.handleCalendarEvents)
+	mux.HandleFunc("GET /api/v1/calendar/today", h.handleCalendarToday)
+	mux.HandleFunc("GET /api/v1/mail/summary", h.handleMailSummary)
+	mux.HandleFunc("GET /api/v1/mail/unread-count", h.handleMailUnreadCount)
+
+	// Settings (XO/Staff only — enforced in handlers)
+	mux.HandleFunc("GET /api/v1/settings", h.handleGetSettings)
+	mux.HandleFunc("PUT /api/v1/settings", h.handleUpdateSettings)
+	mux.HandleFunc("POST /api/v1/settings/test-connection", h.handleTestConnection)
+	mux.HandleFunc("POST /api/v1/settings/upload", h.handleUpload)
+	mux.HandleFunc("POST /api/v1/settings/column-map", h.handleColumnMap)
+	mux.HandleFunc("POST /api/v1/settings/upload/preview", h.handleUploadPreview)
+	mux.HandleFunc("GET /api/v1/settings/system-info", h.handleSystemInfo)
+
 	return mux
 }
 

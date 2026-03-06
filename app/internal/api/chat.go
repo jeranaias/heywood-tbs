@@ -136,7 +136,7 @@ func (h *Handler) handleChat(w http.ResponseWriter, r *http.Request) {
 
 	// Streaming mode
 	if req.Stream {
-		h.handleStreamingChat(w, r, messages, tools, role)
+		h.handleStreamingChat(w, r, messages, tools, role, company)
 		return
 	}
 
@@ -169,7 +169,7 @@ func (h *Handler) handleChat(w http.ResponseWriter, r *http.Request) {
 	if choice.FinishReason == openai.FinishReasonToolCalls && len(choice.Message.ToolCalls) > 0 {
 		messages = append(messages, choice.Message)
 		for _, tc := range choice.Message.ToolCalls {
-			result := h.executeToolCall(tc, role)
+			result := h.executeToolCall(tc, role, company)
 			messages = append(messages, openai.ChatCompletionMessage{
 				Role:       "tool",
 				Content:    result,
@@ -202,7 +202,7 @@ func (h *Handler) handleChat(w http.ResponseWriter, r *http.Request) {
 // handleStreamingChat sends the response as Server-Sent Events.
 // If the model returns tool calls, they are executed synchronously and the
 // final response is then streamed.
-func (h *Handler) handleStreamingChat(w http.ResponseWriter, r *http.Request, messages []openai.ChatCompletionMessage, tools []openai.Tool, role string) {
+func (h *Handler) handleStreamingChat(w http.ResponseWriter, r *http.Request, messages []openai.ChatCompletionMessage, tools []openai.Tool, role, company string) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeError(w, 500, "streaming not supported")
@@ -232,7 +232,7 @@ func (h *Handler) handleStreamingChat(w http.ResponseWriter, r *http.Request, me
 			choice := resp.Choices[0]
 			messages = append(messages, choice.Message)
 			for _, tc := range choice.Message.ToolCalls {
-				result := h.executeToolCall(tc, role)
+				result := h.executeToolCall(tc, role, company)
 				slog.Info("tool call executed", "tool", tc.Function.Name, "id", tc.ID)
 				messages = append(messages, openai.ChatCompletionMessage{
 					Role:       "tool",
@@ -319,7 +319,7 @@ func (h *Handler) streamMessages(w http.ResponseWriter, r *http.Request, flusher
 }
 
 // executeToolCall dispatches a tool call to the appropriate store method and returns the result as a string.
-func (h *Handler) executeToolCall(tc openai.ToolCall, callerRole string) string {
+func (h *Handler) executeToolCall(tc openai.ToolCall, callerRole, callerCompany string) string {
 	var args map[string]interface{}
 	if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
 		return fmt.Sprintf("Error parsing arguments: %v", err)
@@ -338,6 +338,8 @@ func (h *Handler) executeToolCall(tc openai.ToolCall, callerRole string) string 
 		return h.toolWebSearch(args)
 	case "lookup_exam_results":
 		return h.toolLookupExamResults(args)
+	case "lookup_calendar":
+		return h.toolLookupCalendar(args, callerRole, callerCompany)
 	default:
 		return fmt.Sprintf("Unknown tool: %s", tc.Function.Name)
 	}
@@ -1026,6 +1028,74 @@ func formatScheduleSummary(events []models.TrainingEvent) string {
 		}
 		fmt.Fprintf(&b, "- %s (%s): %s %s-%s at %s%s\n",
 			e.Title, e.Code, e.StartDate, e.StartTime, e.EndTime, e.Location, graded)
+	}
+	return b.String()
+}
+
+func (h *Handler) toolLookupCalendar(args map[string]interface{}, role, company string) string {
+	dateStr, _ := args["date"].(string)
+	query, _ := args["query"].(string)
+
+	now := time.Now()
+	var start, end time.Time
+
+	switch dateStr {
+	case "today", "":
+		start = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		end = start.AddDate(0, 0, 1)
+	case "tomorrow":
+		start = time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
+		end = start.AddDate(0, 0, 1)
+	case "this week":
+		start = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		// Go to end of week (Sunday)
+		daysUntilSunday := 7 - int(start.Weekday())
+		end = start.AddDate(0, 0, daysUntilSunday+1)
+	default:
+		parsed, err := time.Parse("2006-01-02", dateStr)
+		if err != nil {
+			return "Error: invalid date format. Use YYYY-MM-DD, 'today', 'tomorrow', or 'this week'."
+		}
+		start = parsed
+		end = parsed.AddDate(0, 0, 1)
+	}
+
+	events := calendarProvider.GetEvents(role, company, start, end)
+
+	// Also merge TBS schedule
+	scheduleEvents := h.scheduleToCalendarEvents(role, company, start, end)
+	events = append(events, scheduleEvents...)
+
+	// Filter by query if provided
+	if query != "" {
+		queryLower := strings.ToLower(query)
+		var filtered []models.CalendarEvent
+		for _, e := range events {
+			if strings.Contains(strings.ToLower(e.Title), queryLower) ||
+				strings.Contains(strings.ToLower(e.Category), queryLower) ||
+				strings.Contains(strings.ToLower(e.Description), queryLower) {
+				filtered = append(filtered, e)
+			}
+		}
+		events = filtered
+	}
+
+	if len(events) == 0 {
+		return fmt.Sprintf("No calendar events found for %s.", dateStr)
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Calendar Events (%d found):\n\n", len(events))
+	for _, e := range events {
+		loc := ""
+		if e.Location != "" {
+			loc = " at " + e.Location
+		}
+		source := ""
+		if e.Source == "outlook" {
+			source = " [Outlook]"
+		}
+		fmt.Fprintf(&b, "- %s: %s%s%s\n", e.Start, e.Title, loc, source)
 	}
 	return b.String()
 }

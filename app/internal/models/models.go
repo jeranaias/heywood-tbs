@@ -271,6 +271,33 @@ type Message struct {
 	CreatedAt string `json:"createdAt"`
 }
 
+// CalendarEvent represents a unified calendar event from any source.
+type CalendarEvent struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Start       string `json:"start"`       // ISO 8601 datetime
+	End         string `json:"end"`         // ISO 8601 datetime
+	Location    string `json:"location"`
+	Description string `json:"description"`
+	Source      string `json:"source"`      // "tbs-schedule", "outlook", "shared"
+	CalendarID  string `json:"calendarId,omitempty"`
+	IsAllDay    bool   `json:"isAllDay"`
+	Organizer   string `json:"organizer,omitempty"`
+	Category    string `json:"category,omitempty"` // "training", "admin", "personal"
+	Company     string `json:"company,omitempty"`  // for role filtering
+}
+
+// MailSummary represents a summarized email message.
+type MailSummary struct {
+	ID        string `json:"id"`
+	Subject   string `json:"subject"`
+	From      string `json:"from"`
+	Preview   string `json:"preview"`
+	Received  string `json:"received"`
+	IsRead    bool   `json:"isRead"`
+	HasAttach bool   `json:"hasAttachments"`
+}
+
 // Notification represents a notification for a user role.
 type Notification struct {
 	ID        string `json:"id"`

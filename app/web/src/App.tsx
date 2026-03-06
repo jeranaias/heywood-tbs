@@ -12,6 +12,8 @@ import { InstructorQuals } from './pages/InstructorQuals'
 import { Schedule } from './pages/Schedule'
 import { MyRecord } from './pages/MyRecord'
 import { TasksPage } from './pages/TasksPage'
+import { SettingsPage } from './pages/SettingsPage'
+import { CalendarPage } from './pages/CalendarPage'
 
 function App() {
   const authProvider = useAuthProvider()
@@ -30,6 +32,8 @@ function App() {
             <Route path="/schedule" element={<Schedule />} />
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/my-record" element={<MyRecord />} />
+            <Route path="/calendar" element={<CalendarPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

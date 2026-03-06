@@ -6,8 +6,10 @@ import {
   AlertTriangle,
   Shield,
   Calendar,
+  CalendarDays,
   User,
   ClipboardList,
+  Settings,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -24,7 +26,9 @@ export function Sidebar({ role, onClose }: SidebarProps) {
     { to: '/at-risk', label: 'At-Risk', icon: AlertTriangle, roles: ['xo', 'staff', 'spc'] },
     { to: '/instructor-quals', label: 'Instructor Quals', icon: Shield, roles: ['xo', 'staff'] },
     { to: '/schedule', label: 'Schedule', icon: Calendar, roles: ['xo', 'staff', 'spc'] },
+    { to: '/calendar', label: 'My Calendar', icon: CalendarDays, roles: ['xo', 'staff', 'spc', 'student'] },
     { to: '/my-record', label: 'My Record', icon: User, roles: ['student'] },
+    { to: '/settings', label: 'Settings', icon: Settings, roles: ['xo', 'staff'] },
   ]
 
   return (

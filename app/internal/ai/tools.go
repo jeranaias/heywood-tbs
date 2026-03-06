@@ -152,6 +152,27 @@ var HeywoodTools = []openai.Tool{
 			}),
 		},
 	},
+	{
+		Type: openai.ToolTypeFunction,
+		Function: &openai.FunctionDefinition{
+			Name:        "lookup_calendar",
+			Description: "Look up calendar events for the current user. Use when asked 'what's on my schedule today?', 'do I have anything Friday?', 'when's my next exam?', or any calendar/schedule-related question.",
+			Parameters: jsonSchema(map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"date": map[string]interface{}{
+						"type":        "string",
+						"description": "ISO date (YYYY-MM-DD) or relative ('today', 'tomorrow', 'this week')",
+					},
+					"query": map[string]interface{}{
+						"type":        "string",
+						"description": "Optional search term to filter events (e.g. 'exam', 'PT', 'meeting')",
+					},
+				},
+				"required": []string{"date"},
+			}),
+		},
+	},
 }
 
 // jsonSchema converts a map to json.RawMessage for the Parameters field.

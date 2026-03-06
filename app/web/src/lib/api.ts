@@ -6,6 +6,7 @@ import type {
   Student, StudentStats, QualStats,
   Instructor, TrainingEvent, Qualification, QualRecord,
   AuthInfo, ChatMessage, Task, Message, Notification,
+  AppSettings, SystemInfo, CalendarEvent, MailSummary,
 } from './types'
 
 const STATIC = import.meta.env.MODE === 'static'
@@ -37,6 +38,17 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
 async function patch<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     method: 'PATCH',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`)
+  return res.json()
+}
+
+async function put<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API}${path}`, {
+    method: 'PUT',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -274,5 +286,51 @@ export const api = {
 
   markNotificationRead: async (id: string) => {
     return post<{ status: string }>(`/notifications/${id}/read`)
+  },
+
+  // Calendar
+  getCalendarEvents: async (params?: Record<string, string>) => {
+    return get<{ events: CalendarEvent[]; start: string; end: string }>('/calendar/events', params)
+  },
+
+  getCalendarToday: async () => {
+    return get<{ events: CalendarEvent[]; date: string }>('/calendar/today')
+  },
+
+  getMailSummary: async () => {
+    return get<{ messages: MailSummary[]; unreadCount: number }>('/mail/summary')
+  },
+
+  getMailUnreadCount: async () => {
+    return get<{ count: number }>('/mail/unread-count')
+  },
+
+  // Settings (XO/Staff only)
+  getSettings: async () => {
+    return get<AppSettings>('/settings')
+  },
+
+  updateSettings: async (settings: AppSettings) => {
+    return put<{ status: string; note: string }>('/settings', settings)
+  },
+
+  testConnection: async (params: { type: string; connectionString?: string; tenantId?: string; clientId?: string; clientSecret?: string; siteUrl?: string }) => {
+    return post<{ status: string; message: string }>('/settings/test-connection', params)
+  },
+
+  uploadFile: async (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await fetch(`${API}/settings/upload`, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    })
+    if (!res.ok) throw new Error(`Upload failed: ${res.statusText}`)
+    return res.json() as Promise<{ status: string; filename: string; path: string; size: number; type: string }>
+  },
+
+  getSystemInfo: async () => {
+    return get<SystemInfo>('/settings/system-info')
   },
 }

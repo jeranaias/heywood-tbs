@@ -1,0 +1,35 @@
+{
+  "dataSource": {
+    "type": "json",
+    "jsonDir": "data",
+    "excelPath": "",
+    "sharepoint": {
+      "tenantId": "",
+      "clientId": "",
+      "clientSecret": "",
+      "siteUrl": "",
+      "cloud": "commercial"
+    },
+    "database": {
+      "type": "",
+      "connectionString": ""
+    }
+  },
+  "ai": {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "searxngUrl": "http://localhost:8888"
+  },
+  "outlook": {
+    "enabled": false,
+    "tenantId": "",
+    "clientId": "",
+    "clientSecret": "",
+    "cloud": "commercial",
+    "masterCalendarId": "",
+    "syncIntervalMinutes": 5
+  },
+  "auth": {
+    "mode": "demo"
+  }
+}

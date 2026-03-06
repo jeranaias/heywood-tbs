@@ -20,20 +20,14 @@ func main() {
 	dataDir := flag.String("data", "data", "path to JSON data directory")
 	flag.Parse()
 
-	// Load data
-	store, err := data.NewStore(*dataDir)
+	// Load data via connector factory (reads settings.json to determine source)
+	store, jsonStore, err := data.NewDataStore(*dataDir)
 	if err != nil {
 		slog.Error("failed to load data", "error", err)
 		os.Exit(1)
 	}
-	slog.Info("data loaded",
-		"students", len(store.Students),
-		"instructors", len(store.Instructors),
-		"schedule", len(store.Schedule),
-		"qualifications", len(store.Qualifications),
-		"qualRecords", len(store.QualRecords),
-		"feedback", len(store.Feedback),
-	)
+	_ = jsonStore // mutable store ref available for hybrid mode
+	slog.Info("data loaded", "studentCount", store.TotalStudentCount())
 
 	// Initialize chat service (auto-detects Azure vs OpenAI from env vars)
 	chatSvc := api.NewChatService()
@@ -58,6 +52,9 @@ func main() {
 		authProvider = &auth.DemoProvider{}
 		slog.Info("auth mode: Demo (role picker)")
 	}
+
+	// Initialize settings
+	api.InitSettings(*dataDir)
 
 	// Build handler and router
 	handler := api.NewHandler(store, chatSvc, weatherSvc, newsSvc, trafficSvc, authProvider, *dev)

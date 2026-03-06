@@ -198,3 +198,83 @@ export interface Notification {
   actionUrl: string
   createdAt: string
 }
+
+export interface AppSettings {
+  dataSource: {
+    type: string
+    jsonDir: string
+    excelPath: string
+    sharepoint: {
+      tenantId: string
+      clientId: string
+      clientSecret: string
+      siteUrl: string
+      cloud: string
+    }
+    database: {
+      type: string
+      connectionString: string
+    }
+  }
+  ai: {
+    provider: string
+    model: string
+    searxngUrl: string
+  }
+  outlook: {
+    enabled: boolean
+    tenantId: string
+    clientId: string
+    clientSecret: string
+    cloud: string
+    masterCalendarId: string
+    syncIntervalMinutes: number
+  }
+  auth: {
+    mode: string
+  }
+}
+
+export interface CalendarEvent {
+  id: string
+  title: string
+  start: string
+  end: string
+  location: string
+  description: string
+  source: string
+  calendarId?: string
+  isAllDay: boolean
+  organizer?: string
+  category?: string
+  company?: string
+}
+
+export interface MailSummary {
+  id: string
+  subject: string
+  from: string
+  preview: string
+  received: string
+  isRead: boolean
+  hasAttachments: boolean
+}
+
+export interface SystemInfo {
+  version: string
+  authMode: string
+  dataSource: string
+  studentCount: number
+  ai: {
+    status: string
+    keyHint: string
+    model: string
+  }
+  searxng: {
+    url: string
+    status: string
+  }
+  outlook: {
+    enabled: boolean
+  }
+}
