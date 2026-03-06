@@ -1,83 +1,190 @@
-# The Heywood Initiative — TBS AI Agent System
+# Heywood — TBS Digital Staff Officer
 
 **Classification:** UNCLASSIFIED // Distribution Unlimited
 
-An AI agent system for The Basic School (TBS), Quantico, functioning as a "Digital Staff Officer" for every Marine in the training pipeline. Built incrementally on platforms already authorized inside MCEN.
+A role-adaptive AI agent for The Basic School (TBS), Quantico. Heywood functions as a Digital Staff Officer — surfacing student performance data, managing tasks, syncing calendars and mail, and answering doctrine questions through natural conversation. Built on platforms authorized inside MCEN.
 
-## Overview
+**Live Demo:** [heywood-tbs.nicefield-9a8db973.eastus.azurecontainerapps.io](https://heywood-tbs.nicefield-9a8db973.eastus.azurecontainerapps.io/)
 
-Heywood delivers role-based AI capabilities (Staff / Instructor / Student) across 15 use cases identified in the TBS AI Vision 2026, from AAR synthesis and counseling preparation to predictive performance analytics and scenario generation.
+## What It Does
 
-## 4-Phase Build Approach
+| Capability | Description |
+|-----------|-------------|
+| **AI Chat** | Conversational access to student data, schedules, quals, and doctrine. Tool-use enabled — Heywood can look up students, check calendars, search the web, and create tasks from natural language. |
+| **Role-Based Views** | XO sees battalion-wide analytics. Staff sees company dashboards. Students see their own record. All from the same app. |
+| **Student Analytics** | 200-student roster with GPA, PFT/CFT, rifle qual, conduct, peer evals. At-risk identification with configurable thresholds. |
+| **Task Management** | Heywood creates actionable tasks from conversation ("Draft counseling for Lt Smith" becomes a tracked task). Priority, status, assignment. |
+| **Calendar & Mail** | Microsoft Outlook integration via Graph API. Personal calendar + master TBS schedule overlay. Mail summaries with unread count. Demo mode generates mock events. |
+| **Instructor Quals** | Qualification tracking across 12 TBS-specific quals. Expiration monitoring, readiness percentages, gap identification. |
+| **Settings & Config** | Web-based admin panel for data sources, AI provider, Outlook sync, and database connections. No CLI required. |
 
-| Phase | Timeline | Cost | Key Deliverables |
-|-------|----------|------|------------------|
-| **Phase 1: Proof of Concept** | Months 0-3 | $0-$1,200 | GenAI.mil prompts, Power BI dashboards, EDD training |
-| **Phase 2: Custom Agent** | Months 3-6 | $3,600-$4,650 | Power App with RBAC, Azure OpenAI RAG pipeline, BARS framework |
-| **Phase 3: Scale** | Months 6-12 | $32,600-$49,800 | Dataverse, MCTIMS integration, predictive analytics, all 8 companies |
-| **Phase 4: Full Heywood** | Months 12-18 | $41,200-$59,200 | MHS GENESIS, cross-cycle trends, scenario engine, field-deployable PWA |
+## Architecture
 
-**Total: $77K-$115K over 18 months** (3-5% of comparable programs)
+```
+┌─────────────────────────────────────────────────┐
+│                   React SPA                      │
+│  Dashboard · Chat · Students · Calendar · Tasks  │
+│  At-Risk · Quals · Schedule · Settings           │
+├─────────────────────────────────────────────────┤
+│              Go HTTP Server (stdlib)              │
+│  REST API · Auth Middleware · Role Filtering      │
+├──────────┬──────────┬───────────┬───────────────┤
+│ DataStore│ AI/Chat  │ MS Graph  │ Auth Provider  │
+│ Interface│ Service  │ Client    │ Interface      │
+├──────────┼──────────┼───────────┼───────────────┤
+│ JSON     │ OpenAI   │ Outlook   │ Demo (cookie)  │
+│ SQLite   │ Azure    │ SharePoint│ CAC/PKI (x509) │
+│ Postgres │ OpenAI   │ Teams     │                │
+│ Excel    │          │           │                │
+└──────────┴──────────┴───────────┴───────────────┘
+```
 
-Each phase delivers standalone value. If funding stops at any phase, TBS keeps everything built.
+## Tech Stack
 
-## Technology Stack
-
-- **LLM:** Azure OpenAI on Azure Government (IL5) — GPT-4o, GPT-4.1
-- **RAG:** Azure AI Search (vector store + hybrid search)
-- **App:** Power Apps (Canvas + Model-Driven)
-- **Automation:** Power Automate
-- **Dashboards:** Power BI with Row-Level Security
-- **Data:** Dataverse (Phase 3+), SharePoint (Phase 1-2)
-- **Auth:** Azure Entra ID (CAC authentication, RBAC)
-- **Monitoring:** Azure Sentinel (cATO compliance)
+| Layer | Technology |
+|-------|-----------|
+| **Frontend** | React 18, TypeScript, Tailwind CSS, Vite |
+| **Backend** | Go 1.24, net/http (stdlib), FIPS 140-3 crypto |
+| **AI** | OpenAI GPT-4o or Azure OpenAI (auto-detected from env) |
+| **Database** | JSON (demo), SQLite (recommended), PostgreSQL (production) |
+| **Microsoft 365** | Graph API — Outlook calendar/mail, SharePoint, Teams |
+| **Auth** | Demo role picker or CAC/PKI (X.509 client certs) |
+| **Deployment** | Docker multi-stage, Azure Container Apps, Azure Gov IL5 ready |
+| **Search** | SearXNG (self-hosted, optional) |
 
 ## Project Structure
 
 ```
 heywood-tbs/
-├── docs/
-│   ├── plan/              # Full build plan and phase details
-│   └── briefs/            # Leadership briefing materials
-├── prompts/
-│   ├── playbook/          # 20 TBS-adapted prompt templates (Phase 1)
-│   └── custom/            # Custom prompts for TBS-specific use cases
-├── governance/
-│   ├── pia/               # Privacy Impact Assessment artifacts
-│   ├── compliance/        # Compliance checklists per component
-│   └── registry/          # Tool registry entries
-├── training/
-│   ├── courses/           # TBS-adapted EDD course materials
-│   └── materials/         # Supplementary training materials
-├── dashboards/
-│   ├── student-performance/  # Power BI dashboard specs
-│   └── instructor-quals/     # Instructor qualification dashboard specs
-└── schemas/
-    ├── sharepoint/        # SharePoint list schemas (Phase 1-2)
-    └── dataverse/         # Dataverse entity models (Phase 3+)
+├── app/
+│   ├── cmd/server/          # Entry point
+│   ├── internal/
+│   │   ├── ai/              # Chat service, tool definitions, weather/news/traffic
+│   │   ├── api/             # REST handlers, router, settings, graph endpoints
+│   │   ├── auth/            # IdentityProvider interface, Demo + CAC providers
+│   │   ├── calendar/        # CalendarProvider interface, Outlook + Mock impls
+│   │   ├── data/            # DataStore interface, JSON/SQL/Excel/Hybrid stores
+│   │   ├── middleware/      # Auth, CORS, security headers
+│   │   ├── models/          # Shared types (Student, Task, CalendarEvent, etc.)
+│   │   └── msgraph/         # Microsoft Graph client (OAuth2, calendar, mail, SP, Teams)
+│   ├── web/
+│   │   └── src/
+│   │       ├── pages/       # 11 page components
+│   │       ├── components/  # Layout, sidebar, charts
+│   │       └── lib/         # API client, types, utilities
+│   ├── data/                # JSON seed data, settings, user roster
+│   ├── Dockerfile           # Multi-stage: node → go → alpine
+│   └── Makefile
+├── docs/                    # Build plan, phase details, briefs
+├── governance/              # PIA, compliance checklists, tool registry
+├── prompts/                 # 20 TBS-adapted prompt templates
+├── training/                # EDD course materials
+└── infrastructure/          # Azure deployment configs
 ```
+
+## Data Sources
+
+Heywood reads student/instructor data from configurable backends. All implement the same 27-method `DataStore` interface — application code never knows which backend is active.
+
+| Source | Best For | Setup |
+|--------|----------|-------|
+| **JSON Files** | Demo, development | Default — no config needed |
+| **SQLite** | Single-server production | Recommended — zero infrastructure, file-based |
+| **PostgreSQL** | Multi-server / MCEN cloud | Connection string in settings |
+| **Excel (.xlsx)** | Units transitioning from spreadsheets | Upload via admin page, auto-maps columns |
+| **Hybrid** | Real units | Reference data from Excel/SP, mutable data in SQLite |
+
+**Mutable data** (tasks, messages, notifications) is isolated per backend. In demo mode, mutable data is in-memory only and resets on restart.
+
+## Microsoft 365 Integration
+
+When configured with Graph API credentials, Heywood connects to:
+
+- **Outlook Calendar** — Personal events + shared master calendar, role-filtered views
+- **Outlook Mail** — Unread count badge, recent message summaries
+- **SharePoint** — Site discovery, list browsing, document library file access
+- **Microsoft Teams** — Team listing, channel browsing, shared file access
+
+Supports commercial Azure, GCC High, and DoD national cloud endpoints. Uses client credentials flow (app-only, `Sites.Selected` permission scope).
+
+Set environment variables: `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, `GRAPH_CLIENT_SECRET`, `GRAPH_CLOUD` (commercial/gcc-high/dod).
+
+## Authentication
+
+| Mode | How | Set By |
+|------|-----|--------|
+| **Demo** | Cookie-based role picker (XO / Staff / SPC / Student) | Default |
+| **CAC/PKI** | X.509 client cert via `X-ARR-ClientCert` header → EDIPI extraction → role lookup from `user-roster.json` | `AUTH_MODE=cac` |
+
+## Quick Start
+
+```bash
+# Clone and build
+cd app
+go mod download
+cd web && npm ci && npm run build && cd ..
+go build -o heywood ./cmd/server
+
+# Run (demo mode — no config needed)
+./heywood -dev -port 8080
+
+# With AI (set one):
+OPENAI_API_KEY=sk-... ./heywood -dev
+# or
+AZURE_OPENAI_ENDPOINT=https://... AZURE_OPENAI_KEY=... AZURE_OPENAI_DEPLOYMENT=gpt-4o ./heywood -dev
+```
+
+Open `http://localhost:8080`. Pick a role. Start talking to Heywood.
+
+## Docker
+
+```bash
+cd app
+docker build -t heywood-tbs .
+docker run -p 8080:8080 \
+  -e OPENAI_API_KEY=sk-... \
+  heywood-tbs
+```
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `OPENAI_API_KEY` | One AI provider | OpenAI API key |
+| `AZURE_OPENAI_ENDPOINT` | One AI provider | Azure OpenAI endpoint URL |
+| `AZURE_OPENAI_KEY` | One AI provider | Azure OpenAI API key |
+| `AZURE_OPENAI_DEPLOYMENT` | With Azure | Deployment name (e.g., gpt-4o) |
+| `AUTH_MODE` | No | `cac` for CAC/PKI auth, omit for demo |
+| `GRAPH_TENANT_ID` | For M365 | Azure AD tenant ID |
+| `GRAPH_CLIENT_ID` | For M365 | App registration client ID |
+| `GRAPH_CLIENT_SECRET` | For M365 | App registration client secret |
+| `GRAPH_CLOUD` | No | `commercial` (default), `gcc-high`, `dod` |
+| `GRAPH_MASTER_CALENDAR_ID` | No | Shared calendar ID for TBS-wide events |
+| `SEARXNG_URL` | No | SearXNG instance URL for web search |
+
+## Codebase
+
+- **~8,400 lines Go** across 8 packages
+- **~4,400 lines TypeScript/React** across 11 pages
+- **27-method DataStore interface** with 5 backend implementations
+- **12 AI tools** for conversational data access
+- **FIPS 140-3** native crypto (Go 1.24, no BoringCrypto/CGO)
 
 ## Foundation
 
-Built on the [Expert-Driven Development (EDD)](https://github.com/jeranaias/expertdrivendevelopment) curriculum:
-- 5-course training progression (AI Fluency → Builder → Platform → Advanced → Supervisor)
-- 51 interactive prompt templates across 10 categories
-- Governance SOP with 12 sections and 4-layer framework
-- 7 reusable governance templates
+Built on [Expert-Driven Development (EDD)](https://github.com/jeranaias/expertdrivendevelopment) — a 5-course AI training curriculum with 51 prompt templates, governance SOP, and reusable templates for DoD AI adoption.
 
 ## Authorization
 
-- **Phase 1:** No ATO required (GenAI.mil + Power BI + SharePoint within MCEN boundary)
-- **Phase 2:** IATT for Azure OpenAI + Power App custom connector
-- **Phase 3-4:** Full ATO or cATO (inherits Azure Gov FedRAMP High baseline)
+- **Demo/Dev:** No ATO required (runs on any machine)
+- **MCEN Deployment:** Azure Container Apps on Azure Gov, inherits FedRAMP High baseline. IATT for Azure OpenAI custom connector. Full ATO/cATO path documented.
 
 ## Data Handling
 
-- **CUI:** Authorized on GenAI.mil and Azure OpenAI (IL5)
-- **PII:** Requires PIA at each phase gate; minimized by design
-- **PHI:** MHS GENESIS integration only in Phase 4, conditional on PIA approval
+- **CUI:** Authorized on Azure OpenAI (IL5)
+- **PII:** Minimized by design, PIA required at each phase gate
 - **Classified:** Never authorized on any Heywood component
 
 ---
 
-**Reminder:** Do not include any classified, CUI, PII, or operationally sensitive information in this repository. All content must be UNCLASSIFIED.
+**Do not include classified, CUI, PII, or operationally sensitive information in this repository.**
