@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"heywood-tbs/internal/auth"
 )
@@ -42,6 +43,16 @@ func AuthWithProvider(provider auth.IdentityProvider) func(http.Handler) http.Ha
 				studentID = identity.ID
 			}
 			ctx = context.WithValue(ctx, StudentIDKey, studentID)
+
+			// Block unauthorized users from all API routes except /auth/me and /healthz
+			if identity.Role == auth.RoleUnauthorized &&
+				strings.HasPrefix(r.URL.Path, "/api/") &&
+				r.URL.Path != "/api/v1/auth/me" &&
+				r.URL.Path != "/api/v1/healthz" {
+				http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+				return
+			}
+
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -56,7 +67,7 @@ func GetIdentity(ctx context.Context) *auth.UserIdentity {
 	if v, ok := ctx.Value(identityKey).(*auth.UserIdentity); ok {
 		return v
 	}
-	return &auth.UserIdentity{ID: "unknown", Role: "staff", Source: "demo"}
+	return &auth.UserIdentity{ID: "unknown", Role: auth.RoleUnauthorized, Source: "unknown"}
 }
 
 // GetRole extracts the role from request context.
@@ -64,7 +75,7 @@ func GetRole(ctx context.Context) string {
 	if v, ok := ctx.Value(RoleKey).(string); ok {
 		return v
 	}
-	return "staff"
+	return auth.RoleUnauthorized
 }
 
 // GetCompany extracts the company filter from request context.

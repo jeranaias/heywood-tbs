@@ -3,31 +3,81 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"sync"
 
 	"heywood-tbs/internal/ai"
 	"heywood-tbs/internal/auth"
+	"heywood-tbs/internal/calendar"
 	"heywood-tbs/internal/data"
+	"heywood-tbs/internal/middleware"
+	"heywood-tbs/internal/msgraph"
 )
 
 // Handler holds dependencies for all API handlers.
 type Handler struct {
-	store        data.DataStore
-	chatSvc      *ChatService
-	weatherSvc   *ai.WeatherService
-	newsSvc      *ai.NewsService
-	trafficSvc   *ai.TrafficService
-	authProvider auth.IdentityProvider
-	dev          bool // development mode — relaxes Secure cookie flag for HTTP
+	store           data.DataStore
+	chatSvc         *ChatService
+	weatherSvc      *ai.WeatherService
+	newsSvc         *ai.NewsService
+	trafficSvc      *ai.TrafficService
+	authProvider    auth.IdentityProvider
+	chatRateLimiter *middleware.RateLimiter
+	dev             bool // development mode — relaxes Secure cookie flag for HTTP
+
+	// Calendar provider (mock or Outlook via Graph)
+	calendarProvider calendar.CalendarProvider
+
+	// Microsoft Graph services
+	graphClient   *msgraph.Client
+	sharePointSvc *msgraph.SharePointService
+	teamsSvc      *msgraph.TeamsService
+
+	// Settings file
+	settingsPath string
+	settingsMu   sync.RWMutex
 }
 
 // NewHandler creates a new API handler.
-func NewHandler(store data.DataStore, chatSvc *ChatService, weatherSvc *ai.WeatherService, newsSvc *ai.NewsService, trafficSvc *ai.TrafficService, authProvider auth.IdentityProvider, dev bool) *Handler {
-	return &Handler{store: store, chatSvc: chatSvc, weatherSvc: weatherSvc, newsSvc: newsSvc, trafficSvc: trafficSvc, authProvider: authProvider, dev: dev}
+func NewHandler(
+	store data.DataStore,
+	chatSvc *ChatService,
+	weatherSvc *ai.WeatherService,
+	newsSvc *ai.NewsService,
+	trafficSvc *ai.TrafficService,
+	authProvider auth.IdentityProvider,
+	dev bool,
+	calProvider calendar.CalendarProvider,
+	graphClient *msgraph.Client,
+	sharePointSvc *msgraph.SharePointService,
+	teamsSvc *msgraph.TeamsService,
+	settingsPath string,
+) *Handler {
+	if calProvider == nil {
+		calProvider = &calendar.MockCalendar{}
+	}
+	return &Handler{
+		store:            store,
+		chatSvc:          chatSvc,
+		weatherSvc:       weatherSvc,
+		newsSvc:          newsSvc,
+		trafficSvc:       trafficSvc,
+		authProvider:     authProvider,
+		chatRateLimiter:  middleware.NewRateLimiter(5, 10), // 5 req/s, burst 10
+		dev:              dev,
+		calendarProvider: calProvider,
+		graphClient:      graphClient,
+		sharePointSvc:    sharePointSvc,
+		teamsSvc:         teamsSvc,
+		settingsPath:     settingsPath,
+	}
 }
 
 // SetupRouter registers all API routes on the given mux.
 func SetupRouter(h *Handler) *http.ServeMux {
 	mux := http.NewServeMux()
+
+	// Health check (bypasses auth — suitable for k8s/Docker probes)
+	mux.HandleFunc("GET /api/v1/healthz", h.handleHealthz)
 
 	// Students
 	mux.HandleFunc("GET /api/v1/students", h.handleListStudents)
@@ -50,8 +100,14 @@ func SetupRouter(h *Handler) *http.ServeMux {
 	// Feedback
 	mux.HandleFunc("GET /api/v1/feedback", h.handleListFeedback)
 
-	// Chat
-	mux.HandleFunc("POST /api/v1/chat", h.handleChat)
+	// Chat (stricter rate limit: 5 req/s per IP)
+	chatHandler := h.chatRateLimiter.Middleware(http.HandlerFunc(h.handleChat))
+	mux.Handle("POST /api/v1/chat", chatHandler)
+
+	// Chat history (requires SQL-backed store)
+	mux.HandleFunc("GET /api/v1/chat/sessions", h.handleListChatSessions)
+	mux.HandleFunc("GET /api/v1/chat/sessions/{id}/messages", h.handleGetChatMessages)
+	mux.HandleFunc("DELETE /api/v1/chat/sessions/{id}", h.handleDeleteChatSession)
 
 	// Tasks
 	mux.HandleFunc("GET /api/v1/tasks", h.handleListTasks)

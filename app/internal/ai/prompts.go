@@ -7,6 +7,19 @@ import (
 	"heywood-tbs/internal/models"
 )
 
+// PII Policy for System Prompts
+//
+// Names are deliberately injected into system prompts for authorized roles:
+//   - XO/Staff: Full student names, ranks, and scores (they manage Marines by name)
+//   - SPC: Names for their own company only (scoped by auth middleware)
+//   - Student: Only their own name and data
+//
+// The AnonymizeStudent functions in anonymize.go strip names for lower-trust
+// contexts. StripPII removes EDIPI patterns from any text.
+//
+// This is a conscious design choice, not an oversight. The XO at TBS needs to
+// say "How is Lt Smith doing?" not "How is STU-047 doing?"
+
 const baseSystemPrompt = `You are Heywood, a Digital Staff Officer for The Basic School (TBS), USMC, at Quantico, VA.
 
 You assist Marines at TBS with training management, student performance analysis, counseling preparation, after-action review synthesis, and tactical scenario generation.

@@ -7,8 +7,8 @@ import "net/http"
 type DemoProvider struct{}
 
 func (p *DemoProvider) Authenticate(r *http.Request) *UserIdentity {
-	role := "staff"
-	if c, err := r.Cookie("heywood-role"); err == nil && c.Value != "" {
+	role := RoleStaff
+	if c, err := r.Cookie("heywood-role"); err == nil && ValidRoles[c.Value] {
 		role = c.Value
 	}
 

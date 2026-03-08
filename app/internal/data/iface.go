@@ -2,6 +2,19 @@ package data
 
 import "heywood-tbs/internal/models"
 
+// ChatPersister is an optional capability for stores that support chat history.
+// Use type assertion to check: if cp, ok := store.(ChatPersister); ok { ... }
+// The JSON-backed Store does not implement this; SQLStore does.
+type ChatPersister interface {
+	CreateChatSession(session models.ChatSession) error
+	ListChatSessions(userID, userRole string) []models.ChatSession
+	GetChatSession(id string) (*models.ChatSession, bool)
+	UpdateChatSessionTitle(id, title string) error
+	AddChatMessage(sessionID string, msg models.ChatMessage) error
+	GetChatMessages(sessionID string) []models.ChatMessage
+	DeleteChatSession(id string) error
+}
+
 // DataStore defines the contract for TBS data access.
 // The JSON-backed Store implements this. Future implementations (Cosmos DB, SQL)
 // can implement this interface for seamless swapping.
@@ -31,7 +44,7 @@ type DataStore interface {
 	CreateTask(task models.Task) error
 	ListTasks(assignedTo string) []models.Task
 	GetTask(id string) (*models.Task, bool)
-	UpdateTask(id string, updates map[string]interface{}) error
+	UpdateTask(id string, req models.TaskUpdateRequest) error
 
 	// Message operations
 	CreateMessage(msg models.Message) error

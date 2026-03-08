@@ -60,84 +60,133 @@ func NewSQLStore(dataDir, driver, dsn string) (*SQLStore, error) {
 	return s, nil
 }
 
-// migrate creates tables if they don't exist.
+// migration represents a numbered schema migration.
+type migration struct {
+	version int
+	stmts   []string
+}
+
+// migrations returns all schema migrations in order.
+// Version 1 uses IF NOT EXISTS so it is safe to re-run on existing databases
+// that were created before the schema_version table was introduced.
+func (s *SQLStore) migrations() []migration {
+	return []migration{
+		{
+			version: 1,
+			stmts: []string{
+				`CREATE TABLE IF NOT EXISTS tasks (
+					id TEXT PRIMARY KEY,
+					title TEXT NOT NULL,
+					description TEXT DEFAULT '',
+					assigned_to TEXT NOT NULL,
+					created_by TEXT NOT NULL DEFAULT 'heywood',
+					priority TEXT NOT NULL DEFAULT 'medium',
+					status TEXT NOT NULL DEFAULT 'pending',
+					due_date TEXT DEFAULT '',
+					related_id TEXT DEFAULT '',
+					created_at TEXT NOT NULL,
+					updated_at TEXT NOT NULL
+				)`,
+				`CREATE TABLE IF NOT EXISTS messages (
+					id TEXT PRIMARY KEY,
+					from_user TEXT NOT NULL,
+					to_user TEXT NOT NULL,
+					subject TEXT NOT NULL,
+					body TEXT NOT NULL,
+					is_read INTEGER NOT NULL DEFAULT 0,
+					related_id TEXT DEFAULT '',
+					created_at TEXT NOT NULL
+				)`,
+				`CREATE TABLE IF NOT EXISTS notifications (
+					id TEXT PRIMARY KEY,
+					user_role TEXT NOT NULL,
+					type TEXT NOT NULL,
+					title TEXT NOT NULL,
+					body TEXT DEFAULT '',
+					is_read INTEGER NOT NULL DEFAULT 0,
+					action_url TEXT DEFAULT '',
+					created_at TEXT NOT NULL
+				)`,
+				`CREATE TABLE IF NOT EXISTS chat_sessions (
+					id TEXT PRIMARY KEY,
+					user_id TEXT NOT NULL,
+					user_role TEXT NOT NULL,
+					company TEXT DEFAULT '',
+					title TEXT DEFAULT 'New conversation',
+					created_at TEXT NOT NULL,
+					updated_at TEXT NOT NULL
+				)`,
+				`CREATE TABLE IF NOT EXISTS chat_messages (
+					id INTEGER PRIMARY KEY,
+					session_id TEXT NOT NULL,
+					role TEXT NOT NULL,
+					content TEXT NOT NULL,
+					created_at TEXT NOT NULL
+				)`,
+				`CREATE TABLE IF NOT EXISTS id_counter (
+					key TEXT PRIMARY KEY,
+					value INTEGER NOT NULL DEFAULT 0
+				)`,
+				// Indexes for common queries
+				`CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_to)`,
+				`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`,
+				`CREATE INDEX IF NOT EXISTS idx_messages_to ON messages(to_user)`,
+				`CREATE INDEX IF NOT EXISTS idx_notifications_role ON notifications(user_role)`,
+				`CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(is_read)`,
+				`CREATE INDEX IF NOT EXISTS idx_chat_sessions_user ON chat_sessions(user_id)`,
+				`CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id)`,
+			},
+		},
+		// Future migrations go here as {version: 2, stmts: [...]}, etc.
+	}
+}
+
+// migrate applies versioned schema migrations. It creates the schema_version
+// tracking table if it does not exist, reads the current version, and applies
+// only migrations newer than that version. Existing databases without a
+// schema_version table are handled gracefully because version 1 migrations
+// use IF NOT EXISTS.
 func (s *SQLStore) migrate() error {
-	// These SQL statements work for both SQLite and PostgreSQL
-	stmts := []string{
-		`CREATE TABLE IF NOT EXISTS tasks (
-			id TEXT PRIMARY KEY,
-			title TEXT NOT NULL,
-			description TEXT DEFAULT '',
-			assigned_to TEXT NOT NULL,
-			created_by TEXT NOT NULL DEFAULT 'heywood',
-			priority TEXT NOT NULL DEFAULT 'medium',
-			status TEXT NOT NULL DEFAULT 'pending',
-			due_date TEXT DEFAULT '',
-			related_id TEXT DEFAULT '',
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS messages (
-			id TEXT PRIMARY KEY,
-			from_user TEXT NOT NULL,
-			to_user TEXT NOT NULL,
-			subject TEXT NOT NULL,
-			body TEXT NOT NULL,
-			is_read INTEGER NOT NULL DEFAULT 0,
-			related_id TEXT DEFAULT '',
-			created_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS notifications (
-			id TEXT PRIMARY KEY,
-			user_role TEXT NOT NULL,
-			type TEXT NOT NULL,
-			title TEXT NOT NULL,
-			body TEXT DEFAULT '',
-			is_read INTEGER NOT NULL DEFAULT 0,
-			action_url TEXT DEFAULT '',
-			created_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS chat_sessions (
-			id TEXT PRIMARY KEY,
-			user_id TEXT NOT NULL,
-			user_role TEXT NOT NULL,
-			company TEXT DEFAULT '',
-			title TEXT DEFAULT 'New conversation',
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS chat_messages (
-			id INTEGER PRIMARY KEY,
-			session_id TEXT NOT NULL,
-			role TEXT NOT NULL,
-			content TEXT NOT NULL,
-			created_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS id_counter (
-			key TEXT PRIMARY KEY,
-			value INTEGER NOT NULL DEFAULT 0
-		)`,
-		// Indexes for common queries
-		`CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_to)`,
-		`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`,
-		`CREATE INDEX IF NOT EXISTS idx_messages_to ON messages(to_user)`,
-		`CREATE INDEX IF NOT EXISTS idx_notifications_role ON notifications(user_role)`,
-		`CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(is_read)`,
-		`CREATE INDEX IF NOT EXISTS idx_chat_sessions_user ON chat_sessions(user_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id)`,
+	// Ensure the schema_version table exists
+	_, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS schema_version (
+		version INTEGER NOT NULL
+	)`)
+	if err != nil {
+		return fmt.Errorf("create schema_version table: %w", err)
 	}
 
-	for _, stmt := range stmts {
-		if _, err := s.db.Exec(stmt); err != nil {
-			return fmt.Errorf("exec %q: %w", stmt[:60], err)
+	// Read current schema version
+	currentVersion := 0
+	row := s.db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_version`)
+	if err := row.Scan(&currentVersion); err != nil {
+		// Table exists but might be empty; treat as version 0
+		currentVersion = 0
+	}
+
+	slog.Info("schema migration check", "currentVersion", currentVersion)
+
+	for _, m := range s.migrations() {
+		if m.version <= currentVersion {
+			continue
+		}
+		slog.Info("applying migration", "version", m.version)
+		for _, stmt := range m.stmts {
+			if _, err := s.db.Exec(stmt); err != nil {
+				return fmt.Errorf("migration v%d exec %q: %w", m.version, stmt[:min(60, len(stmt))], err)
+			}
+		}
+		// Record the newly applied version
+		_, err := s.db.Exec(`INSERT INTO schema_version (version) VALUES ($1)`, m.version)
+		if err != nil {
+			return fmt.Errorf("record migration v%d: %w", m.version, err)
 		}
 	}
 
-	// Initialize counter if not present
-	s.db.Exec(`INSERT OR IGNORE INTO id_counter (key, value) VALUES ('next_id', 1)`)
-	// PostgreSQL variant
+	// Initialize id counter if not present (safe for both SQLite and PostgreSQL)
 	if s.driver == "pgx" {
 		s.db.Exec(`INSERT INTO id_counter (key, value) VALUES ('next_id', 1) ON CONFLICT (key) DO NOTHING`)
+	} else {
+		s.db.Exec(`INSERT OR IGNORE INTO id_counter (key, value) VALUES ('next_id', 1)`)
 	}
 
 	return nil
@@ -234,24 +283,24 @@ func (s *SQLStore) GetTask(id string) (*models.Task, bool) {
 	return &t, true
 }
 
-func (s *SQLStore) UpdateTask(id string, updates map[string]interface{}) error {
+func (s *SQLStore) UpdateTask(id string, req models.TaskUpdateRequest) error {
 	var sets []string
 	var args []interface{}
 	argN := 1
 
-	if v, ok := updates["status"].(string); ok {
+	if req.Status != nil {
 		sets = append(sets, fmt.Sprintf("status = $%d", argN))
-		args = append(args, v)
+		args = append(args, *req.Status)
 		argN++
 	}
-	if v, ok := updates["priority"].(string); ok {
+	if req.Priority != nil {
 		sets = append(sets, fmt.Sprintf("priority = $%d", argN))
-		args = append(args, v)
+		args = append(args, *req.Priority)
 		argN++
 	}
-	if v, ok := updates["assignedTo"].(string); ok {
+	if req.AssignedTo != nil {
 		sets = append(sets, fmt.Sprintf("assigned_to = $%d", argN))
-		args = append(args, v)
+		args = append(args, *req.AssignedTo)
 		argN++
 	}
 
@@ -429,29 +478,9 @@ func (s *SQLStore) UnreadNotificationCount(userRole string) int {
 	return count
 }
 
-// --- Chat history operations ---
+// --- Chat history operations (implements data.ChatPersister) ---
 
-// ChatSession represents a persistent chat conversation.
-type ChatSession struct {
-	ID        string `json:"id"`
-	UserID    string `json:"userId"`
-	UserRole  string `json:"userRole"`
-	Company   string `json:"company"`
-	Title     string `json:"title"`
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
-}
-
-// ChatMsg represents a stored chat message (extends models.ChatMessage with metadata).
-type ChatMsg struct {
-	ID        int    `json:"id"`
-	SessionID string `json:"sessionId"`
-	Role      string `json:"role"`
-	Content   string `json:"content"`
-	CreatedAt string `json:"createdAt"`
-}
-
-func (s *SQLStore) CreateChatSession(session ChatSession) error {
+func (s *SQLStore) CreateChatSession(session models.ChatSession) error {
 	if session.CreatedAt == "" {
 		session.CreatedAt = time.Now().Format(time.RFC3339)
 	}
@@ -471,7 +500,7 @@ func (s *SQLStore) CreateChatSession(session ChatSession) error {
 	return err
 }
 
-func (s *SQLStore) ListChatSessions(userID, userRole string) []ChatSession {
+func (s *SQLStore) ListChatSessions(userID, userRole string) []models.ChatSession {
 	var rows *sql.Rows
 	var err error
 
@@ -490,9 +519,9 @@ func (s *SQLStore) ListChatSessions(userID, userRole string) []ChatSession {
 	}
 	defer rows.Close()
 
-	var sessions []ChatSession
+	var sessions []models.ChatSession
 	for rows.Next() {
-		var cs ChatSession
+		var cs models.ChatSession
 		if err := rows.Scan(&cs.ID, &cs.UserID, &cs.UserRole, &cs.Company,
 			&cs.Title, &cs.CreatedAt, &cs.UpdatedAt); err != nil {
 			continue
@@ -502,8 +531,8 @@ func (s *SQLStore) ListChatSessions(userID, userRole string) []ChatSession {
 	return sessions
 }
 
-func (s *SQLStore) GetChatSession(id string) (*ChatSession, bool) {
-	var cs ChatSession
+func (s *SQLStore) GetChatSession(id string) (*models.ChatSession, bool) {
+	var cs models.ChatSession
 	err := s.db.QueryRow(
 		`SELECT id, user_id, user_role, company, title, created_at, updated_at
 		 FROM chat_sessions WHERE id = $1`, id,

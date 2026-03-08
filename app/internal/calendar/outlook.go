@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"time"
 
+	"heywood-tbs/internal/auth"
 	"heywood-tbs/internal/models"
 	"heywood-tbs/internal/msgraph"
 )
@@ -86,7 +87,7 @@ func (o *OutlookCalendar) GetMailSummary(role string) []models.MailSummary {
 func (o *OutlookCalendar) CreateEvent(event models.CalendarEvent) (models.CalendarEvent, error) {
 	// Use a default user for event creation; in production this would be
 	// the authenticated user's UPN from the CAC certificate.
-	userID := o.resolveUser("staff", "")
+	userID := o.resolveUser(auth.RoleStaff, "")
 	if userID == "" {
 		return event, nil
 	}

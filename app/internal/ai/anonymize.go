@@ -61,7 +61,41 @@ func AnonymizeStudentList(students []models.Student) string {
 	return b.String()
 }
 
-// StripPII removes any EDIPIs or names from arbitrary text.
+// StripPII removes any EDIPIs from arbitrary text.
 func StripPII(text string) string {
 	return edipiPattern.ReplaceAllString(text, "[REDACTED]")
+}
+
+// StripNames replaces student last names and full names in text with their
+// student ID. This is for lower-trust contexts where names should not appear.
+// Longer names are replaced first to avoid partial-match issues (e.g.,
+// "Johnsonville" before "Johnson").
+func StripNames(text string, students []models.Student) string {
+	// Build replacement pairs sorted by length (longest first) to avoid
+	// replacing substrings of longer names before the full match.
+	type repl struct {
+		from string
+		to   string
+	}
+	var pairs []repl
+	for _, s := range students {
+		fullName := s.FirstName + " " + s.LastName
+		pairs = append(pairs, repl{from: fullName, to: s.ID})
+		// Also replace last name alone (common in military context)
+		pairs = append(pairs, repl{from: s.LastName, to: s.ID})
+	}
+
+	// Sort longest first so "De La Cruz" is replaced before "Cruz"
+	for i := 0; i < len(pairs); i++ {
+		for j := i + 1; j < len(pairs); j++ {
+			if len(pairs[j].from) > len(pairs[i].from) {
+				pairs[i], pairs[j] = pairs[j], pairs[i]
+			}
+		}
+	}
+
+	for _, p := range pairs {
+		text = strings.ReplaceAll(text, p.from, p.to)
+	}
+	return text
 }

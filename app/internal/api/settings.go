@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
+	"heywood-tbs/internal/auth"
 	"heywood-tbs/internal/data"
 	"heywood-tbs/internal/middleware"
 )
@@ -62,20 +62,11 @@ type AuthSettings struct {
 	Mode string `json:"mode"` // "demo", "cac"
 }
 
-var (
-	settingsMu   sync.RWMutex
-	settingsPath string
-)
+func (h *Handler) loadSettings() (*AppSettings, error) {
+	h.settingsMu.RLock()
+	defer h.settingsMu.RUnlock()
 
-func InitSettings(dataDir string) {
-	settingsPath = filepath.Join(dataDir, "settings.json")
-}
-
-func loadSettings() (*AppSettings, error) {
-	settingsMu.RLock()
-	defer settingsMu.RUnlock()
-
-	data, err := os.ReadFile(settingsPath)
+	data, err := os.ReadFile(h.settingsPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return defaultSettings(), nil
@@ -90,15 +81,15 @@ func loadSettings() (*AppSettings, error) {
 	return &s, nil
 }
 
-func saveSettings(s *AppSettings) error {
-	settingsMu.Lock()
-	defer settingsMu.Unlock()
+func (h *Handler) saveSettings(s *AppSettings) error {
+	h.settingsMu.Lock()
+	defer h.settingsMu.Unlock()
 
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(settingsPath, data, 0644)
+	return os.WriteFile(h.settingsPath, data, 0644)
 }
 
 func defaultSettings() *AppSettings {
@@ -125,12 +116,12 @@ func defaultSettings() *AppSettings {
 // handleGetSettings returns the current settings (secrets masked).
 func (h *Handler) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "xo" && role != "staff" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "settings are only accessible to XO and staff")
 		return
 	}
 
-	s, err := loadSettings()
+	s, err := h.loadSettings()
 	if err != nil {
 		writeError(w, 500, "failed to load settings")
 		return
@@ -144,7 +135,7 @@ func (h *Handler) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 // handleUpdateSettings updates the persisted settings.
 func (h *Handler) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "xo" && role != "staff" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "settings are only accessible to XO and staff")
 		return
 	}
@@ -156,7 +147,7 @@ func (h *Handler) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Load current settings to preserve masked secrets
-	current, err := loadSettings()
+	current, err := h.loadSettings()
 	if err != nil {
 		writeError(w, 500, "failed to load current settings")
 		return
@@ -173,7 +164,7 @@ func (h *Handler) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		incoming.Outlook.ClientSecret = current.Outlook.ClientSecret
 	}
 
-	if err := saveSettings(&incoming); err != nil {
+	if err := h.saveSettings(&incoming); err != nil {
 		writeError(w, 500, "failed to save settings")
 		return
 	}
@@ -184,7 +175,7 @@ func (h *Handler) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 // handleTestConnection tests connectivity for a data source.
 func (h *Handler) handleTestConnection(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "xo" && role != "staff" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "settings are only accessible to XO and staff")
 		return
 	}
@@ -209,7 +200,7 @@ func (h *Handler) handleTestConnection(w http.ResponseWriter, r *http.Request) {
 	case "sqlite":
 		dsn := req.ConnectionString
 		if dsn == "" {
-			dsn = filepath.Join(filepath.Dir(settingsPath), "heywood.db")
+			dsn = filepath.Join(filepath.Dir(h.settingsPath), "heywood.db")
 		}
 		if err := data.TestConnection("sqlite", dsn); err != nil {
 			writeJSON(w, 200, map[string]interface{}{"status": "error", "message": err.Error()})
@@ -246,7 +237,7 @@ func (h *Handler) handleTestConnection(w http.ResponseWriter, r *http.Request) {
 // handleUpload handles Excel/CSV file uploads.
 func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "xo" && role != "staff" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "uploads are only accessible to XO and staff")
 		return
 	}
@@ -267,7 +258,7 @@ func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Save to uploads directory
-	uploadDir := filepath.Join(filepath.Dir(settingsPath), "uploads")
+	uploadDir := filepath.Join(filepath.Dir(h.settingsPath), "uploads")
 	os.MkdirAll(uploadDir, 0755)
 	destPath := filepath.Join(uploadDir, header.Filename)
 
@@ -295,7 +286,7 @@ func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request) {
 // handleColumnMap auto-detects column mappings for an uploaded Excel file.
 func (h *Handler) handleColumnMap(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "xo" && role != "staff" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "settings are only accessible to XO and staff")
 		return
 	}
@@ -349,7 +340,7 @@ func (h *Handler) handleColumnMap(w http.ResponseWriter, r *http.Request) {
 // handleUploadPreview returns a preview of parsed data before import.
 func (h *Handler) handleUploadPreview(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "xo" && role != "staff" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "settings are only accessible to XO and staff")
 		return
 	}
@@ -409,12 +400,12 @@ func (h *Handler) handleUploadPreview(w http.ResponseWriter, r *http.Request) {
 // handleSystemInfo returns system status information.
 func (h *Handler) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "xo" && role != "staff" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "system info is only accessible to XO and staff")
 		return
 	}
 
-	s, err := loadSettings()
+	s, err := h.loadSettings()
 	if err != nil {
 		s = defaultSettings()
 	}

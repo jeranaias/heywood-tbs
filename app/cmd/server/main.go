@@ -1,29 +1,30 @@
 package main
 
 import (
-	"flag"
+	"context"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
+	"time"
 
 	"heywood-tbs/internal/ai"
 	"heywood-tbs/internal/api"
 	"heywood-tbs/internal/auth"
 	"heywood-tbs/internal/calendar"
+	"heywood-tbs/internal/config"
 	"heywood-tbs/internal/data"
 	"heywood-tbs/internal/middleware"
 	"heywood-tbs/internal/msgraph"
 )
 
 func main() {
-	port := flag.String("port", "8080", "server port")
-	dev := flag.Bool("dev", false, "development mode (CORS enabled, no embedded SPA)")
-	dataDir := flag.String("data", "data", "path to JSON data directory")
-	flag.Parse()
+	cfg := config.Load()
 
 	// Load data via connector factory (reads settings.json to determine source)
-	store, jsonStore, err := data.NewDataStore(*dataDir)
+	store, jsonStore, err := data.NewDataStore(cfg.DataDir)
 	if err != nil {
 		slog.Error("failed to load data", "error", err)
 		os.Exit(1)
@@ -42,12 +43,11 @@ func main() {
 	newsSvc := &ai.NewsService{}
 	trafficSvc := &ai.TrafficService{}
 
-	// Select auth provider based on AUTH_MODE env var
+	// Select auth provider
 	var authProvider auth.IdentityProvider
-	authMode := os.Getenv("AUTH_MODE")
-	switch authMode {
+	switch cfg.AuthMode {
 	case "cac":
-		rosterPath := filepath.Join(*dataDir, "user-roster.json")
+		rosterPath := filepath.Join(cfg.DataDir, "user-roster.json")
 		authProvider = auth.NewCACProvider(rosterPath)
 		slog.Info("auth mode: CAC/PKI")
 	default:
@@ -55,40 +55,37 @@ func main() {
 		slog.Info("auth mode: Demo (role picker)")
 	}
 
-	// Initialize settings
-	api.InitSettings(*dataDir)
-
 	// Initialize Microsoft Graph client (for Outlook, SharePoint, Teams)
-	graphTenantID := os.Getenv("GRAPH_TENANT_ID")
-	graphClientID := os.Getenv("GRAPH_CLIENT_ID")
-	graphClientSecret := os.Getenv("GRAPH_CLIENT_SECRET")
-	graphCloud := os.Getenv("GRAPH_CLOUD") // "commercial", "gcc-high", "dod"
-	if graphCloud == "" {
-		graphCloud = "commercial"
-	}
+	var calProvider calendar.CalendarProvider
+	var graphClient *msgraph.Client
+	var sharePointSvc *msgraph.SharePointService
+	var teamsSvc *msgraph.TeamsService
 
-	if graphTenantID != "" && graphClientID != "" && graphClientSecret != "" {
-		graphClient := msgraph.NewClient(graphTenantID, graphClientID, graphClientSecret, graphCloud)
-		masterCalID := os.Getenv("GRAPH_MASTER_CALENDAR_ID")
+	if cfg.GraphTenantID != "" && cfg.GraphClientID != "" && cfg.GraphClientSecret != "" {
+		graphClient = msgraph.NewClient(cfg.GraphTenantID, cfg.GraphClientID, cfg.GraphClientSecret, cfg.GraphCloud)
 
 		// Wire up real Outlook calendar
-		outlookCal := calendar.NewOutlookCalendar(graphClient, masterCalID, nil)
-		api.InitCalendar(outlookCal)
+		calProvider = calendar.NewOutlookCalendar(graphClient, cfg.GraphMasterCalID, nil)
 
 		// Wire up SharePoint and Teams services
-		api.InitGraph(graphClient)
+		sharePointSvc = msgraph.NewSharePointService(graphClient)
+		teamsSvc = msgraph.NewTeamsService(graphClient)
 
-		slog.Info("Microsoft Graph connected", "cloud", graphCloud, "tenantID", graphTenantID[:8]+"...")
+		slog.Info("Microsoft Graph connected", "cloud", cfg.GraphCloud, "tenantID", cfg.GraphTenantID[:8]+"...")
 	} else {
 		slog.Info("Microsoft Graph not configured — using mock calendar/mail")
 	}
 
+	// Settings file path
+	settingsPath := filepath.Join(cfg.DataDir, "settings.json")
+
 	// Build handler and router
-	handler := api.NewHandler(store, chatSvc, weatherSvc, newsSvc, trafficSvc, authProvider, *dev)
+	handler := api.NewHandler(store, chatSvc, weatherSvc, newsSvc, trafficSvc, authProvider, cfg.Dev,
+		calProvider, graphClient, sharePointSvc, teamsSvc, settingsPath)
 	mux := api.SetupRouter(handler)
 
 	// Serve static files in production (embedded SPA)
-	if !*dev {
+	if !cfg.Dev {
 		// In production, serve the built React SPA from web/dist
 		fs := http.FileServer(http.Dir("web/dist"))
 		mux.Handle("GET /assets/", fs)
@@ -99,17 +96,44 @@ func main() {
 		})
 	}
 
-	// Apply middleware
+	// Apply middleware (outermost first)
+	apiLimiter := middleware.NewRateLimiter(60, 120) // 60 req/s per IP, burst 120
 	chain := middleware.Chain(
+		middleware.Recovery,
+		middleware.MaxBodySize(1<<20), // 1MB default body limit
+		apiLimiter.Middleware,
 		middleware.SecurityHeaders,
-		middleware.CORS(*dev),
+		middleware.CORS(cfg.Dev),
 		middleware.AuthWithProvider(authProvider),
 	)
 
-	addr := ":" + *port
-	slog.Info("Heywood TBS starting", "addr", addr, "dev", *dev)
-	if err := http.ListenAndServe(addr, chain(mux)); err != nil {
-		slog.Error("server error", "error", err)
-		os.Exit(1)
+	addr := ":" + cfg.Port
+	srv := &http.Server{
+		Addr:         addr,
+		Handler:      chain(mux),
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 120 * time.Second, // SSE streams need long writes
+		IdleTimeout:  120 * time.Second,
 	}
+
+	// Graceful shutdown on SIGTERM/SIGINT
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		slog.Info("Heywood TBS starting", "addr", addr, "dev", cfg.Dev)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	<-ctx.Done()
+	slog.Info("shutting down gracefully (15s timeout)...")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("forced shutdown", "error", err)
+	}
+	slog.Info("server stopped")
 }

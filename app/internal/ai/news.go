@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -128,13 +129,16 @@ func fetchNews() ([]NewsItem, error) {
 	}
 
 	// Sort by recency (newest first), limit to 10
-	for i := 0; i < len(allItems); i++ {
-		for j := i + 1; j < len(allItems); j++ {
-			if allItems[j].Published.After(allItems[i].Published) {
-				allItems[i], allItems[j] = allItems[j], allItems[i]
-			}
+	slices.SortFunc(allItems, func(a, b NewsItem) int {
+		// Newest first: if b is after a, b should come first (return +1)
+		if b.Published.After(a.Published) {
+			return 1
 		}
-	}
+		if a.Published.After(b.Published) {
+			return -1
+		}
+		return 0
+	})
 
 	if len(allItems) > 10 {
 		allItems = allItems[:10]

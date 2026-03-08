@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -50,9 +51,18 @@ func (w *WeatherService) Get() (*WeatherData, error) {
 
 func fetchWeather() (*WeatherData, error) {
 	// Open-Meteo: free, no API key, works from any datacenter
-	// Quantico, VA: 38.52°N, 77.29°W
-	const url = "https://api.open-meteo.com/v1/forecast?" +
-		"latitude=38.52&longitude=-77.29" +
+	// Default: Quantico, VA (38.52°N, 77.29°W)
+	lat := os.Getenv("WEATHER_LAT")
+	if lat == "" {
+		lat = "38.52"
+	}
+	lon := os.Getenv("WEATHER_LON")
+	if lon == "" {
+		lon = "-77.29"
+	}
+
+	url := "https://api.open-meteo.com/v1/forecast?" +
+		"latitude=" + lat + "&longitude=" + lon +
 		"&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m" +
 		"&daily=temperature_2m_max,temperature_2m_min" +
 		"&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%2FNew_York" +

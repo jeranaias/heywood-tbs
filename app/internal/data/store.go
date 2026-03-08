@@ -438,19 +438,19 @@ func (s *Store) GetTask(id string) (*models.Task, bool) {
 	return nil, false
 }
 
-func (s *Store) UpdateTask(id string, updates map[string]interface{}) error {
+func (s *Store) UpdateTask(id string, req models.TaskUpdateRequest) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.Tasks {
 		if s.Tasks[i].ID == id {
-			if v, ok := updates["status"].(string); ok {
-				s.Tasks[i].Status = v
+			if req.Status != nil {
+				s.Tasks[i].Status = *req.Status
 			}
-			if v, ok := updates["priority"].(string); ok {
-				s.Tasks[i].Priority = v
+			if req.Priority != nil {
+				s.Tasks[i].Priority = *req.Priority
 			}
-			if v, ok := updates["assignedTo"].(string); ok {
-				s.Tasks[i].AssignedTo = v
+			if req.AssignedTo != nil {
+				s.Tasks[i].AssignedTo = *req.AssignedTo
 			}
 			s.Tasks[i].UpdatedAt = time.Now().Format(time.RFC3339)
 			return s.persistJSON("tasks.json", s.Tasks)

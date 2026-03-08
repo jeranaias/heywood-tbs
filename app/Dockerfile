@@ -41,9 +41,9 @@ USER heywood
 
 EXPOSE 8080
 
-# Health check for Azure App Service
+# Health check for Azure App Service / k8s probes
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
-    CMD wget -q --spider http://localhost:8080/api/v1/auth/me || exit 1
+    CMD wget -q --spider http://localhost:8080/api/v1/healthz || exit 1
 
 ENTRYPOINT ["./heywood"]
 CMD ["-port", "8080", "-data", "data"]

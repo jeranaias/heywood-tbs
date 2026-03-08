@@ -81,8 +81,8 @@ func (h *HybridStore) ListTasks(assignedTo string) []models.Task {
 func (h *HybridStore) GetTask(id string) (*models.Task, bool) {
 	return h.mutable.GetTask(id)
 }
-func (h *HybridStore) UpdateTask(id string, updates map[string]interface{}) error {
-	return h.mutable.UpdateTask(id, updates)
+func (h *HybridStore) UpdateTask(id string, req models.TaskUpdateRequest) error {
+	return h.mutable.UpdateTask(id, req)
 }
 func (h *HybridStore) CreateMessage(msg models.Message) error {
 	return h.mutable.CreateMessage(msg)

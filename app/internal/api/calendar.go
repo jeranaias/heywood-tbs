@@ -6,18 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"heywood-tbs/internal/calendar"
+	"heywood-tbs/internal/auth"
 	"heywood-tbs/internal/middleware"
 	"heywood-tbs/internal/models"
 )
-
-// calendarProvider is the active calendar backend (mock or Outlook).
-var calendarProvider calendar.CalendarProvider = &calendar.MockCalendar{}
-
-// InitCalendar sets the calendar provider. Call from main.go if Outlook is configured.
-func InitCalendar(provider calendar.CalendarProvider) {
-	calendarProvider = provider
-}
 
 // handleCalendarEvents returns merged events (TBS schedule + calendar) for a date range.
 func (h *Handler) handleCalendarEvents(w http.ResponseWriter, r *http.Request) {
@@ -54,7 +46,7 @@ func (h *Handler) handleCalendarEvents(w http.ResponseWriter, r *http.Request) {
 		end = start.AddDate(0, 0, 7)
 	}
 
-	events := calendarProvider.GetEvents(role, company, start, end)
+	events := h.calendarProvider.GetEvents(role, company, start, end)
 
 	// Also merge TBS training schedule from the data store
 	scheduleEvents := h.scheduleToCalendarEvents(role, company, start, end)
@@ -76,7 +68,7 @@ func (h *Handler) handleCalendarToday(w http.ResponseWriter, r *http.Request) {
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	endOfDay := today.AddDate(0, 0, 1)
 
-	events := calendarProvider.GetEvents(role, company, today, endOfDay)
+	events := h.calendarProvider.GetEvents(role, company, today, endOfDay)
 	scheduleEvents := h.scheduleToCalendarEvents(role, company, today, endOfDay)
 	events = append(events, scheduleEvents...)
 
@@ -90,7 +82,7 @@ func (h *Handler) handleCalendarToday(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleMailSummary(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
 
-	mails := calendarProvider.GetMailSummary(role)
+	mails := h.calendarProvider.GetMailSummary(role)
 
 	unread := 0
 	for _, m := range mails {
@@ -109,7 +101,7 @@ func (h *Handler) handleMailSummary(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleMailUnreadCount(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
 
-	mails := calendarProvider.GetMailSummary(role)
+	mails := h.calendarProvider.GetMailSummary(role)
 	unread := 0
 	for _, m := range mails {
 		if !m.IsRead {
@@ -128,7 +120,7 @@ func (h *Handler) handleCreateCalendarEvent(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	created, err := calendarProvider.CreateEvent(event)
+	created, err := h.calendarProvider.CreateEvent(event)
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -150,7 +142,7 @@ func (h *Handler) scheduleToCalendarEvents(role, company string, start, end time
 		}
 
 		// Role-based filtering
-		if role == "student" || role == "spc" {
+		if role == auth.RoleStudent || role == auth.RoleSPC {
 			if company != "" && e.Company != "" && !strings.EqualFold(e.Company, company) && e.Company != "all" {
 				continue
 			}

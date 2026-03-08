@@ -3,12 +3,13 @@ package api
 import (
 	"net/http"
 
+	"heywood-tbs/internal/auth"
 	"heywood-tbs/internal/middleware"
 )
 
 func (h *Handler) handleListInstructors(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role == "student" {
+	if role == auth.RoleStudent {
 		writeError(w, 403, "access denied")
 		return
 	}
@@ -23,7 +24,7 @@ func (h *Handler) handleListInstructors(w http.ResponseWriter, r *http.Request) 
 
 func (h *Handler) handleGetInstructor(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "staff" && role != "xo" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "access denied")
 		return
 	}
@@ -39,7 +40,7 @@ func (h *Handler) handleGetInstructor(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleListQualifications(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "staff" && role != "xo" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "access denied")
 		return
 	}
@@ -48,7 +49,7 @@ func (h *Handler) handleListQualifications(w http.ResponseWriter, r *http.Reques
 
 func (h *Handler) handleListQualRecords(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "staff" && role != "xo" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "access denied")
 		return
 	}
@@ -57,7 +58,7 @@ func (h *Handler) handleListQualRecords(w http.ResponseWriter, r *http.Request) 
 
 func (h *Handler) handleQualStats(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "staff" && role != "xo" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "access denied")
 		return
 	}

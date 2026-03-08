@@ -4,27 +4,28 @@ import (
 	"fmt"
 	"strings"
 
+	"heywood-tbs/internal/auth"
 	"heywood-tbs/internal/models"
 )
 
 // MockGreeting returns an appropriate greeting based on role.
 func MockGreeting(role string, stats models.StudentStats) string {
 	switch role {
-	case "staff":
+	case auth.RoleStaff:
 		return fmt.Sprintf("Good morning. I'm Heywood, your digital staff officer for TBS.\n\n"+
 			"Current status: %d active students, average composite %.1f. "+
 			"%d students (%.1f%%) are flagged at-risk.\n\n"+
 			"How can I help you today?",
 			stats.ActiveStudents, stats.AvgComposite,
 			stats.AtRiskCount, stats.AtRiskPercent)
-	case "spc":
+	case auth.RoleSPC:
 		return fmt.Sprintf("Good morning, sir/ma'am. I'm Heywood, here to help you manage your students.\n\n"+
 			"Your company currently has %d students with an average composite of %.1f. "+
 			"%d (%.1f%%) are flagged at-risk.\n\n"+
 			"I can help with counseling prep, performance tracking, AAR analysis, or scenario generation. What do you need?",
 			stats.ActiveStudents, stats.AvgComposite,
 			stats.AtRiskCount, stats.AtRiskPercent)
-	case "student":
+	case auth.RoleStudent:
 		return "Hey there. I'm Heywood, your study assistant at TBS. " +
 			"I can help you understand your scores, identify areas to focus on, and prepare for upcoming evaluations. " +
 			"What would you like to know?"

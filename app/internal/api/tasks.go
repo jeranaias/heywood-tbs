@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"strings"
 
+	"heywood-tbs/internal/auth"
 	"heywood-tbs/internal/middleware"
+	"heywood-tbs/internal/models"
 )
 
 func (h *Handler) handleListTasks(w http.ResponseWriter, r *http.Request) {
@@ -16,7 +18,7 @@ func (h *Handler) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// XO and staff can see all tasks
-	if role == "xo" || role == "staff" {
+	if auth.IsPrivileged(role) {
 		if r.URL.Query().Get("all") == "true" {
 			assignedTo = ""
 		}
@@ -38,21 +40,13 @@ func (h *Handler) handleGetTask(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var updates map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+	var req models.TaskUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, 400, "invalid request body")
 		return
 	}
 
-	// Only allow status, priority, assignedTo updates
-	allowed := map[string]bool{"status": true, "priority": true, "assignedTo": true}
-	for k := range updates {
-		if !allowed[k] {
-			delete(updates, k)
-		}
-	}
-
-	if err := h.store.UpdateTask(id, updates); err != nil {
+	if err := h.store.UpdateTask(id, req); err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			writeError(w, 404, err.Error())
 		} else {
@@ -73,7 +67,7 @@ func (h *Handler) handleListMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// XO and staff can see all messages
-	if (role == "xo" || role == "staff") && r.URL.Query().Get("all") == "true" {
+	if auth.IsPrivileged(role) && r.URL.Query().Get("all") == "true" {
 		userRole = ""
 	}
 

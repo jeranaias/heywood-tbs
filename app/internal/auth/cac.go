@@ -29,13 +29,13 @@ type CACProvider struct {
 }
 
 // NewCACProvider loads the user roster from the given JSON file path.
-// If the file doesn't exist or is empty, all users default to "staff".
+// If the file doesn't exist or is empty, all users get RoleUnauthorized.
 func NewCACProvider(rosterPath string) *CACProvider {
 	p := &CACProvider{roster: make(map[string]*rosterEntry)}
 
 	data, err := os.ReadFile(rosterPath)
 	if err != nil {
-		slog.Warn("CAC roster not found, all users will default to staff", "path", rosterPath, "error", err)
+		slog.Warn("CAC roster not found, all users will be unauthorized", "path", rosterPath, "error", err)
 		return p
 	}
 
@@ -56,15 +56,15 @@ func (p *CACProvider) Authenticate(r *http.Request) *UserIdentity {
 	// Azure App Service forwards the client cert as URL-encoded PEM
 	certHeader := r.Header.Get("X-ARR-ClientCert")
 	if certHeader == "" {
-		slog.Debug("no client cert header, defaulting to staff")
-		return &UserIdentity{ID: "unknown", Role: "staff", Source: "cac"}
+		slog.Debug("no client cert header")
+		return &UserIdentity{ID: "unknown", Role: RoleUnauthorized, Source: "cac"}
 	}
 
 	// Decode URL encoding
 	decoded, err := url.QueryUnescape(certHeader)
 	if err != nil {
 		slog.Error("failed to URL-decode client cert", "error", err)
-		return &UserIdentity{ID: "unknown", Role: "staff", Source: "cac"}
+		return &UserIdentity{ID: "unknown", Role: RoleUnauthorized, Source: "cac"}
 	}
 
 	// Parse PEM block
@@ -72,13 +72,13 @@ func (p *CACProvider) Authenticate(r *http.Request) *UserIdentity {
 	if block == nil {
 		// Try raw DER (some proxies send base64-encoded DER without PEM wrapper)
 		slog.Error("failed to decode PEM from client cert header")
-		return &UserIdentity{ID: "unknown", Role: "staff", Source: "cac"}
+		return &UserIdentity{ID: "unknown", Role: RoleUnauthorized, Source: "cac"}
 	}
 
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
 		slog.Error("failed to parse X.509 certificate", "error", err)
-		return &UserIdentity{ID: "unknown", Role: "staff", Source: "cac"}
+		return &UserIdentity{ID: "unknown", Role: RoleUnauthorized, Source: "cac"}
 	}
 
 	// DoD CAC Common Name format: LAST.FIRST.MI.EDIPI
@@ -86,7 +86,7 @@ func (p *CACProvider) Authenticate(r *http.Request) *UserIdentity {
 	parts := strings.Split(cn, ".")
 	if len(parts) < 4 {
 		slog.Warn("unexpected CN format", "cn", cn)
-		return &UserIdentity{ID: cn, Name: cn, Role: "staff", Source: "cac"}
+		return &UserIdentity{ID: cn, Name: cn, Role: RoleUnauthorized, Source: "cac"}
 	}
 
 	edipi := parts[len(parts)-1]
@@ -112,12 +112,12 @@ func (p *CACProvider) Authenticate(r *http.Request) *UserIdentity {
 		}
 	}
 
-	// EDIPI not in roster — default to staff
-	slog.Warn("EDIPI not found in roster, defaulting to staff", "edipi", edipi)
+	// EDIPI not in roster — deny access
+	slog.Warn("EDIPI not found in roster", "edipi", edipi)
 	return &UserIdentity{
 		ID:     edipi,
 		Name:   name,
-		Role:   "staff",
+		Role:   RoleUnauthorized,
 		Email:  email,
 		Source: "cac",
 	}

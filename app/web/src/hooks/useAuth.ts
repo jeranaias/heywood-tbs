@@ -38,7 +38,7 @@ export function useAuthProvider() {
     setLoading(true)
     try {
       const company = (role === 'spc') ? 'Alpha' : ''
-      const sid = role === 'student' ? (studentId || 'STU-001') : ''
+      const sid = role === 'student' ? (studentId || '') : ''
       const info = await api.switchRole(role, company, sid)
       setAuth(info)
     } catch (err) {

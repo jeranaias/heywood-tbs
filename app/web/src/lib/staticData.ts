@@ -46,7 +46,7 @@ export function switchAuth(role: string, company: string, studentId?: string): A
     xo: 'Executive Officer',
     staff: 'TBS Staff',
     spc: `SPC (${company} Company)`,
-    student: `Student ${studentId || 'STU-001'}`,
+    student: `Student ${studentId || ''}`,
   }
   currentAuth = {
     role,

@@ -4,32 +4,19 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"heywood-tbs/internal/auth"
 	"heywood-tbs/internal/middleware"
-	"heywood-tbs/internal/msgraph"
 )
-
-var (
-	graphClient    *msgraph.Client
-	sharePointSvc  *msgraph.SharePointService
-	teamsSvc       *msgraph.TeamsService
-)
-
-// InitGraph sets up the shared Microsoft Graph services.
-func InitGraph(client *msgraph.Client) {
-	graphClient = client
-	sharePointSvc = msgraph.NewSharePointService(client)
-	teamsSvc = msgraph.NewTeamsService(client)
-}
 
 // handleGraphTest tests the Microsoft Graph connection.
 func (h *Handler) handleGraphTest(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "xo" && role != "staff" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "admin only")
 		return
 	}
 
-	if graphClient == nil {
+	if h.graphClient == nil {
 		writeJSON(w, 200, map[string]interface{}{
 			"status":  "not_configured",
 			"message": "Microsoft Graph credentials not set. Set GRAPH_TENANT_ID, GRAPH_CLIENT_ID, and GRAPH_CLIENT_SECRET environment variables.",
@@ -37,7 +24,7 @@ func (h *Handler) handleGraphTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := graphClient.TestConnection(); err != nil {
+	if err := h.graphClient.TestConnection(); err != nil {
 		writeJSON(w, 200, map[string]interface{}{
 			"status":  "error",
 			"message": err.Error(),
@@ -56,12 +43,12 @@ func (h *Handler) handleGraphTest(w http.ResponseWriter, r *http.Request) {
 // handleSharePointSite resolves a SharePoint site by URL.
 func (h *Handler) handleSharePointSite(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "xo" && role != "staff" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "admin only")
 		return
 	}
 
-	if sharePointSvc == nil {
+	if h.sharePointSvc == nil {
 		writeError(w, 503, "SharePoint not configured")
 		return
 	}
@@ -72,7 +59,7 @@ func (h *Handler) handleSharePointSite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	site, err := sharePointSvc.GetSiteByURL(siteURL)
+	site, err := h.sharePointSvc.GetSiteByURL(siteURL)
 	if err != nil {
 		writeJSON(w, 200, map[string]interface{}{
 			"status":  "error",
@@ -87,12 +74,12 @@ func (h *Handler) handleSharePointSite(w http.ResponseWriter, r *http.Request) {
 // handleSharePointLists returns lists from a SharePoint site.
 func (h *Handler) handleSharePointLists(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "xo" && role != "staff" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "admin only")
 		return
 	}
 
-	if sharePointSvc == nil {
+	if h.sharePointSvc == nil {
 		writeError(w, 503, "SharePoint not configured")
 		return
 	}
@@ -103,7 +90,7 @@ func (h *Handler) handleSharePointLists(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	lists, err := sharePointSvc.ListLists(siteID)
+	lists, err := h.sharePointSvc.ListLists(siteID)
 	if err != nil {
 		writeJSON(w, 200, map[string]interface{}{
 			"status":  "error",
@@ -118,12 +105,12 @@ func (h *Handler) handleSharePointLists(w http.ResponseWriter, r *http.Request) 
 // handleSharePointListItems returns items from a SharePoint list.
 func (h *Handler) handleSharePointListItems(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "xo" && role != "staff" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "admin only")
 		return
 	}
 
-	if sharePointSvc == nil {
+	if h.sharePointSvc == nil {
 		writeError(w, 503, "SharePoint not configured")
 		return
 	}
@@ -135,7 +122,7 @@ func (h *Handler) handleSharePointListItems(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	items, err := sharePointSvc.GetListItems(siteID, listID)
+	items, err := h.sharePointSvc.GetListItems(siteID, listID)
 	if err != nil {
 		writeJSON(w, 200, map[string]interface{}{
 			"status":  "error",
@@ -153,12 +140,12 @@ func (h *Handler) handleSharePointListItems(w http.ResponseWriter, r *http.Reque
 // handleSharePointDrives returns document libraries for a SharePoint site.
 func (h *Handler) handleSharePointDrives(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "xo" && role != "staff" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "admin only")
 		return
 	}
 
-	if sharePointSvc == nil {
+	if h.sharePointSvc == nil {
 		writeError(w, 503, "SharePoint not configured")
 		return
 	}
@@ -169,7 +156,7 @@ func (h *Handler) handleSharePointDrives(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	drives, err := sharePointSvc.GetDrives(siteID)
+	drives, err := h.sharePointSvc.GetDrives(siteID)
 	if err != nil {
 		writeJSON(w, 200, map[string]interface{}{
 			"status":  "error",
@@ -184,12 +171,12 @@ func (h *Handler) handleSharePointDrives(w http.ResponseWriter, r *http.Request)
 // handleSharePointFiles returns files from a SharePoint document library.
 func (h *Handler) handleSharePointFiles(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "xo" && role != "staff" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "admin only")
 		return
 	}
 
-	if sharePointSvc == nil {
+	if h.sharePointSvc == nil {
 		writeError(w, 503, "SharePoint not configured")
 		return
 	}
@@ -202,7 +189,7 @@ func (h *Handler) handleSharePointFiles(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	items, err := sharePointSvc.ListDriveItems(siteID, driveID, folder)
+	items, err := h.sharePointSvc.ListDriveItems(siteID, driveID, folder)
 	if err != nil {
 		writeJSON(w, 200, map[string]interface{}{
 			"status":  "error",
@@ -222,17 +209,17 @@ func (h *Handler) handleSharePointFiles(w http.ResponseWriter, r *http.Request) 
 // handleTeamsList returns teams the app has access to.
 func (h *Handler) handleTeamsList(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "xo" && role != "staff" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "admin only")
 		return
 	}
 
-	if teamsSvc == nil {
+	if h.teamsSvc == nil {
 		writeError(w, 503, "Teams not configured")
 		return
 	}
 
-	teams, err := teamsSvc.ListTeams()
+	teams, err := h.teamsSvc.ListTeams()
 	if err != nil {
 		writeJSON(w, 200, map[string]interface{}{
 			"status":  "error",
@@ -247,12 +234,12 @@ func (h *Handler) handleTeamsList(w http.ResponseWriter, r *http.Request) {
 // handleTeamsChannels returns channels for a team.
 func (h *Handler) handleTeamsChannels(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "xo" && role != "staff" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "admin only")
 		return
 	}
 
-	if teamsSvc == nil {
+	if h.teamsSvc == nil {
 		writeError(w, 503, "Teams not configured")
 		return
 	}
@@ -263,7 +250,7 @@ func (h *Handler) handleTeamsChannels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	channels, err := teamsSvc.ListChannels(teamID)
+	channels, err := h.teamsSvc.ListChannels(teamID)
 	if err != nil {
 		writeJSON(w, 200, map[string]interface{}{
 			"status":  "error",
@@ -278,12 +265,12 @@ func (h *Handler) handleTeamsChannels(w http.ResponseWriter, r *http.Request) {
 // handleTeamsFiles returns files from a Teams channel's shared folder.
 func (h *Handler) handleTeamsFiles(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role != "xo" && role != "staff" {
+	if !auth.IsPrivileged(role) {
 		writeError(w, 403, "admin only")
 		return
 	}
 
-	if teamsSvc == nil {
+	if h.teamsSvc == nil {
 		writeError(w, 503, "Teams not configured")
 		return
 	}
@@ -309,7 +296,7 @@ func (h *Handler) handleTeamsFiles(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	files, err := teamsSvc.ListChannelFiles(teamID, channelID)
+	files, err := h.teamsSvc.ListChannelFiles(teamID, channelID)
 	if err != nil {
 		writeJSON(w, 200, map[string]interface{}{
 			"status":  "error",

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"heywood-tbs/internal/auth"
 	"heywood-tbs/internal/middleware"
 	"heywood-tbs/internal/models"
 )
@@ -16,11 +17,11 @@ func (h *Handler) handleAuthMe(w http.ResponseWriter, r *http.Request) {
 	name := identity.Name
 	if name == "" {
 		switch identity.Role {
-		case "xo":
+		case auth.RoleXO:
 			name = "Executive Officer"
-		case "spc":
+		case auth.RoleSPC:
 			name = "Staff Platoon Commander"
-		case "student":
+		case auth.RoleStudent:
 			if st, ok := h.store.GetStudent(studentID); ok {
 				name = st.Rank + " " + st.LastName
 			} else {
@@ -58,8 +59,7 @@ func (h *Handler) handleAuthSwitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	validRoles := map[string]bool{"staff": true, "spc": true, "student": true, "xo": true}
-	if !validRoles[req.Role] {
+	if !auth.ValidRoles[req.Role] {
 		writeError(w, 400, "role must be staff, spc, student, or xo")
 		return
 	}
@@ -89,11 +89,11 @@ func (h *Handler) handleAuthSwitch(w http.ResponseWriter, r *http.Request) {
 
 	name := "TBS Staff"
 	switch req.Role {
-	case "xo":
+	case auth.RoleXO:
 		name = "Executive Officer"
-	case "spc":
+	case auth.RoleSPC:
 		name = "Staff Platoon Commander"
-	case "student":
+	case auth.RoleStudent:
 		if st, ok := h.store.GetStudent(req.StudentID); ok {
 			name = st.Rank + " " + st.LastName
 		}

@@ -220,9 +220,10 @@ type ExamQuestionResult struct {
 
 // ChatRequest is the request body for the chat endpoint.
 type ChatRequest struct {
-	Message string        `json:"message"`
-	History []ChatMessage `json:"history"`
-	Stream  bool          `json:"stream"`
+	Message   string        `json:"message"`
+	History   []ChatMessage `json:"history"`
+	Stream    bool          `json:"stream"`
+	SessionID string        `json:"sessionId,omitempty"`
 }
 
 // ChatMessage represents a single message in chat history.
@@ -233,7 +234,8 @@ type ChatMessage struct {
 
 // ChatResponse is the response from the chat endpoint.
 type ChatResponse struct {
-	Response string `json:"response"`
+	Response  string `json:"response"`
+	SessionID string `json:"sessionId,omitempty"`
 }
 
 // AuthInfo holds the current user's role information.
@@ -242,6 +244,13 @@ type AuthInfo struct {
 	Company   string `json:"company"`
 	StudentID string `json:"studentId,omitempty"`
 	Name      string `json:"name"`
+}
+
+// TaskUpdateRequest is the typed request body for task updates.
+type TaskUpdateRequest struct {
+	Status     *string `json:"status,omitempty"`
+	Priority   *string `json:"priority,omitempty"`
+	AssignedTo *string `json:"assignedTo,omitempty"`
 }
 
 // Task represents an actionable task created by Heywood or a user.
@@ -296,6 +305,17 @@ type MailSummary struct {
 	Received  string `json:"received"`
 	IsRead    bool   `json:"isRead"`
 	HasAttach bool   `json:"hasAttachments"`
+}
+
+// ChatSession represents a persistent chat conversation.
+type ChatSession struct {
+	ID        string `json:"id"`
+	UserID    string `json:"userId"`
+	UserRole  string `json:"userRole"`
+	Company   string `json:"company"`
+	Title     string `json:"title"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
 }
 
 // Notification represents a notification for a user role.

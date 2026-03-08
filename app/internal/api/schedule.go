@@ -3,12 +3,13 @@ package api
 import (
 	"net/http"
 
+	"heywood-tbs/internal/auth"
 	"heywood-tbs/internal/middleware"
 )
 
 func (h *Handler) handleListSchedule(w http.ResponseWriter, r *http.Request) {
 	role := middleware.GetRole(r.Context())
-	if role == "student" {
+	if role == auth.RoleStudent {
 		writeError(w, 403, "access denied")
 		return
 	}

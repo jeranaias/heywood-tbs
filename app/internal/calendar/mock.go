@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"heywood-tbs/internal/auth"
 	"heywood-tbs/internal/models"
 )
 
@@ -40,13 +41,13 @@ func (m *MockCalendar) GetEvents(role, company string, start, end time.Time) []m
 
 		// Role-specific events
 		switch role {
-		case "xo":
+		case auth.RoleXO:
 			events = append(events, m.xoEvents(dateStr, dayOfWeek)...)
-		case "staff":
+		case auth.RoleStaff:
 			events = append(events, m.staffEvents(dateStr, dayOfWeek)...)
-		case "spc":
+		case auth.RoleSPC:
 			events = append(events, m.spcEvents(dateStr, dayOfWeek, company)...)
-		case "student":
+		case auth.RoleStudent:
 			events = append(events, m.studentEvents(dateStr, dayOfWeek, company)...)
 		}
 
@@ -273,22 +274,22 @@ func (m *MockCalendar) GetMailSummary(role string) []models.MailSummary {
 	now := time.Now()
 
 	switch role {
-	case "xo":
+	case auth.RoleXO:
 		return []models.MailSummary{
 			{ID: "mail-1", Subject: "Training Schedule Update — Week 12", From: "S-3 Operations", Preview: "Updated training matrix attached. Key changes to Range 8 allocation...", Received: now.Add(-2 * time.Hour).Format(time.RFC3339), IsRead: false, HasAttach: true},
 			{ID: "mail-2", Subject: "RE: At-Risk Student Board Results", From: "Capt Rodriguez", Preview: "Concur with recommendations. Lt Chen and Lt Park should receive additional...", Received: now.Add(-5 * time.Hour).Format(time.RFC3339), IsRead: false},
 			{ID: "mail-3", Subject: "Quarterly Training Brief — Draft", From: "GySgt Williams", Preview: "Sir, please review the attached draft brief for CO approval...", Received: now.Add(-24 * time.Hour).Format(time.RFC3339), IsRead: true, HasAttach: true},
 		}
-	case "staff":
+	case auth.RoleStaff:
 		return []models.MailSummary{
 			{ID: "mail-4", Subject: "Instructor Qual Renewal — Deadline 15 Mar", From: "Training Admin", Preview: "The following instructors have qualifications expiring within 30 days...", Received: now.Add(-1 * time.Hour).Format(time.RFC3339), IsRead: false},
 			{ID: "mail-5", Subject: "Range Request Approved", From: "Range Control", Preview: "Your range request for 12-14 Mar has been approved. Time block: 0800-1600...", Received: now.Add(-8 * time.Hour).Format(time.RFC3339), IsRead: true},
 		}
-	case "spc":
+	case auth.RoleSPC:
 		return []models.MailSummary{
 			{ID: "mail-6", Subject: "Alpha Co — Weekly Student Status Report", From: "1stSgt Davis", Preview: "SPC, updated student tracker attached. Two new at-risk nominations...", Received: now.Add(-3 * time.Hour).Format(time.RFC3339), IsRead: false, HasAttach: true},
 		}
-	case "student":
+	case auth.RoleStudent:
 		return []models.MailSummary{
 			{ID: "mail-7", Subject: "Land Navigation Practical — Packing List", From: "Capt Thompson", Preview: "Ensure the following items are in your pack for Thursday's land nav...", Received: now.Add(-6 * time.Hour).Format(time.RFC3339), IsRead: false},
 			{ID: "mail-8", Subject: "Study Group — Thursday 1800", From: "Lt Martinez", Preview: "Hey, we're meeting at the library Thursday at 1800 to prep for Exam 2...", Received: now.Add(-10 * time.Hour).Format(time.RFC3339), IsRead: true},
