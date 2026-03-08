@@ -89,10 +89,34 @@ func (h *Handler) buildChatContext(role, company, studentID, message string) (sy
 			ctxParts = append(ctxParts, fmt.Sprintf("Today's date: %s\nNo training events scheduled for today.", today))
 		}
 
+		// This week's schedule
+		weekEvents := h.store.ThisWeekSchedule(today)
+		if len(weekEvents) > 0 {
+			ctxParts = append(ctxParts, "\nThis week's remaining events:")
+			shown := 0
+			for _, e := range weekEvents {
+				if e.StartDate == today {
+					continue
+				}
+				graded := ""
+				if e.IsGraded {
+					graded = " [GRADED]"
+				}
+				ctxParts = append(ctxParts, fmt.Sprintf("- %s %s–%s: %s (%s)%s at %s | Lead: %s",
+					e.StartDate, e.StartTime, e.EndTime, e.Title, e.Code, graded, e.Location, e.LeadInstructor))
+				shown++
+				if shown >= 15 {
+					ctxParts = append(ctxParts, fmt.Sprintf("  ...and %d more", len(weekEvents)-shown))
+					break
+				}
+			}
+		}
+
 		// At-risk summary
 		atRisk := h.store.AtRiskStudents("")
 		if len(atRisk) > 0 {
-			ctxParts = append(ctxParts, fmt.Sprintf("\nAt-risk students: %d total", len(atRisk)))
+			ctxParts = append(ctxParts, fmt.Sprintf("\nAt-risk students: %d total (%.1f%% of class)", len(atRisk), float64(len(atRisk))/float64(stats.ActiveStudents)*100))
+			ctxParts = append(ctxParts, "Most critical (lowest overall):")
 			show := 10
 			if show > len(atRisk) {
 				show = len(atRisk)
@@ -102,14 +126,24 @@ func (h *Handler) buildChatContext(role, company, studentID, message string) (sy
 				if len(s.RiskFlags) > 0 {
 					flags = " — " + strings.Join(s.RiskFlags, ", ")
 				}
-				ctxParts = append(ctxParts, fmt.Sprintf("- %s (%s): Overall %.1f, Trend: %s%s", fmt.Sprintf("%s %s, %s", s.Rank, s.LastName, s.FirstName), s.ID, s.OverallComposite, s.Trend, flags))
+				ctxParts = append(ctxParts, fmt.Sprintf("  %s %s, %s (%s): Acad %.1f | MilSk %.1f | Ldr %.1f | Overall %.1f | Trend: %s%s",
+					s.Rank, s.LastName, s.FirstName, s.ID,
+					s.AcademicComposite, s.MilSkillsComposite, s.LeadershipComposite,
+					s.OverallComposite, s.Trend, flags))
 			}
 		}
 
-		// Qual alerts
+		// Qual alerts — with specifics
 		qs := h.store.QualStats()
-		if qs.ExpiredCount > 0 || qs.Expiring30 > 0 {
-			ctxParts = append(ctxParts, fmt.Sprintf("\nQual alerts: %d expired, %d critical (30d), %d coverage gaps", qs.ExpiredCount, qs.Expiring30, len(qs.CoverageGaps)))
+		if qs.ExpiredCount > 0 || qs.Expiring30 > 0 || len(qs.CoverageGaps) > 0 {
+			ctxParts = append(ctxParts, fmt.Sprintf("\nQual alerts: %d expired, %d critical (30d), %d warning (60d), %d coverage gaps",
+				qs.ExpiredCount, qs.Expiring30, qs.Expiring60, len(qs.CoverageGaps)))
+			if len(qs.CoverageGaps) > 0 {
+				ctxParts = append(ctxParts, "Coverage gaps:")
+				for _, g := range qs.CoverageGaps {
+					ctxParts = append(ctxParts, fmt.Sprintf("  %s: %d qualified / %d required (gap: %d)", g.QualName, g.QualifiedCount, g.RequiredCount, g.Gap))
+				}
+			}
 		}
 
 		// Specific student lookup if mentioned
@@ -193,11 +227,19 @@ func (h *Handler) buildChatContext(role, company, studentID, message string) (sy
 		}
 
 		if student != nil {
-			ctxParts = append(ctxParts, fmt.Sprintf("\nYour current scores:\n- Academic: %.1f (Exams: %.0f, %.0f, %.0f, %.0f | Quiz Avg: %.1f)\n- Mil Skills: %.1f (PFT: %d, CFT: %d)\n- Leadership: %.1f\n- Overall: %.1f\n- Trend: %s\n- At-Risk: %v",
+			ctxParts = append(ctxParts, fmt.Sprintf("\nYour performance data (use these numbers in your response):\n"+
+				"- Academic: %.1f (Exam1: %.0f, Exam2: %.0f, Exam3: %.0f, Exam4: %.0f | Quiz Avg: %.1f)\n"+
+				"- Mil Skills: %.1f (PFT: %d, CFT: %d, Rifle: %s, Pistol: %s, LandNav Day: %s, Night: %s, Written: %.1f)\n"+
+				"- Leadership: %.1f (Week12: %.1f, Week22: %.1f | Peer Week12: %.1f, Peer Week22: %.1f)\n"+
+				"- Overall: %.1f | Standing: %s | Company Rank: %d\n"+
+				"- Trend: %s | At-Risk: %v",
 				student.AcademicComposite, student.Exam1, student.Exam2, student.Exam3, student.Exam4, student.QuizAvg,
-				student.MilSkillsComposite, student.PFTScore, student.CFTScore,
-				student.LeadershipComposite,
-				student.OverallComposite, student.Trend, student.AtRisk))
+				student.MilSkillsComposite, student.PFTScore, student.CFTScore, student.RifleQual, student.PistolQual,
+				student.LandNavDay, student.LandNavNight, student.LandNavWritten,
+				student.LeadershipComposite, student.LeadershipWeek12, student.LeadershipWeek22,
+				student.PeerEvalWeek12, student.PeerEvalWeek22,
+				student.OverallComposite, student.ClassStandingThird, student.CompanyRank,
+				student.Trend, student.AtRisk))
 		}
 
 		userContext = strings.Join(ctxParts, "\n")
