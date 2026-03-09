@@ -199,6 +199,28 @@ export interface Notification {
   createdAt: string
 }
 
+export interface FollowUp {
+  description: string
+  dueDate: string
+  status: string
+}
+
+export interface CounselingSession {
+  id: string
+  studentId: string
+  studentName: string
+  counselorRole: string
+  counselorName: string
+  date: string
+  type: string
+  outline: string
+  notes: string
+  followUps: FollowUp[]
+  status: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface AppSettings {
   dataSource: {
     type: string

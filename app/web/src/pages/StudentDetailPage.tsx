@@ -6,12 +6,17 @@ import { api } from '../lib/api'
 import type { Student } from '../lib/types'
 import { formatScore, scoreBadge, scoreLabel, trendIcon, trendColor } from '../lib/utils'
 import { useChat } from '../hooks/useChat'
+import { useAuth } from '../hooks/useAuth'
+import { RiskFlagToggle } from '../components/students/RiskFlagToggle'
+import { StudentNotesPanel } from '../components/students/StudentNotesPanel'
 
 export function StudentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [student, setStudent] = useState<Student | null>(null)
   const [loading, setLoading] = useState(true)
   const chat = useChat()
+  const { auth } = useAuth()
+  const canEdit = auth.role === 'xo' || auth.role === 'staff' || auth.role === 'spc'
 
   useEffect(() => {
     if (!id) return
@@ -162,8 +167,10 @@ export function StudentDetailPage() {
         </div>
       </div>
 
-      {/* Risk Flags */}
-      {student.riskFlags.length > 0 && (
+      {/* Risk Flags — editable for staff/SPC/XO, read-only for students */}
+      {canEdit ? (
+        <RiskFlagToggle student={student} onUpdate={setStudent} />
+      ) : student.riskFlags.length > 0 && (
         <div className="bg-red-50 rounded-lg border border-red-200 p-4">
           <h3 className="text-sm font-semibold text-red-800 mb-2">Risk Flags</h3>
           <div className="flex flex-wrap gap-2">
@@ -176,7 +183,12 @@ export function StudentDetailPage() {
         </div>
       )}
 
-      {/* Notes */}
+      {/* Staff Notes — visible to staff/SPC/XO only */}
+      {canEdit && id && (
+        <StudentNotesPanel studentId={id} />
+      )}
+
+      {/* Legacy notes field */}
       {student.notes && (
         <div className="bg-yellow-50 rounded-lg border border-yellow-200 p-4">
           <h3 className="text-sm font-semibold text-yellow-800 mb-1">Notes</h3>

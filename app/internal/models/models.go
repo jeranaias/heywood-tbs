@@ -44,6 +44,24 @@ type Student struct {
 	Notes              string   `json:"notes"`
 }
 
+// StudentNote is a note or observation attached to a student record.
+type StudentNote struct {
+	ID         string `json:"id"`
+	StudentID  string `json:"studentId"`
+	AuthorRole string `json:"authorRole"`
+	AuthorName string `json:"authorName"`
+	Content    string `json:"content"`
+	Type       string `json:"type"` // "note", "observation", "counseling-note"
+	CreatedAt  string `json:"createdAt"`
+}
+
+// StudentUpdateRequest is the request body for updating a student's mutable fields.
+type StudentUpdateRequest struct {
+	Notes     *string  `json:"notes,omitempty"`
+	AtRisk    *bool    `json:"atRisk,omitempty"`
+	RiskFlags []string `json:"riskFlags,omitempty"`
+}
+
 // Instructor represents a TBS instructor or staff member.
 type Instructor struct {
 	ID                 string `json:"id"`
@@ -246,11 +264,24 @@ type AuthInfo struct {
 	Name      string `json:"name"`
 }
 
+// TaskCreateRequest is the request body for creating a task.
+type TaskCreateRequest struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	AssignedTo  string `json:"assignedTo"`
+	Priority    string `json:"priority"`
+	DueDate     string `json:"dueDate,omitempty"`
+	RelatedID   string `json:"relatedId,omitempty"`
+}
+
 // TaskUpdateRequest is the typed request body for task updates.
 type TaskUpdateRequest struct {
-	Status     *string `json:"status,omitempty"`
-	Priority   *string `json:"priority,omitempty"`
-	AssignedTo *string `json:"assignedTo,omitempty"`
+	Status      *string `json:"status,omitempty"`
+	Priority    *string `json:"priority,omitempty"`
+	AssignedTo  *string `json:"assignedTo,omitempty"`
+	Title       *string `json:"title,omitempty"`
+	Description *string `json:"description,omitempty"`
+	DueDate     *string `json:"dueDate,omitempty"`
 }
 
 // Task represents an actionable task created by Heywood or a user.
@@ -316,6 +347,30 @@ type ChatSession struct {
 	Title     string `json:"title"`
 	CreatedAt string `json:"createdAt"`
 	UpdatedAt string `json:"updatedAt"`
+}
+
+// CounselingSession represents a counseling session with a student.
+type CounselingSession struct {
+	ID            string     `json:"id"`
+	StudentID     string     `json:"studentId"`
+	StudentName   string     `json:"studentName"`
+	CounselorRole string     `json:"counselorRole"`
+	CounselorName string     `json:"counselorName"`
+	Date          string     `json:"date"`
+	Type          string     `json:"type"`     // "initial", "progress", "event-driven", "end-of-phase"
+	Outline       string     `json:"outline"`  // AI-generated markdown
+	Notes         string     `json:"notes"`    // counselor's actual notes
+	FollowUps     []FollowUp `json:"followUps"`
+	Status        string     `json:"status"`   // "draft", "conducted", "completed"
+	CreatedAt     string     `json:"createdAt"`
+	UpdatedAt     string     `json:"updatedAt"`
+}
+
+// FollowUp is a follow-up action item from a counseling session.
+type FollowUp struct {
+	Description string `json:"description"`
+	DueDate     string `json:"dueDate"`
+	Status      string `json:"status"` // "pending", "completed"
 }
 
 // Notification represents a notification for a user role.

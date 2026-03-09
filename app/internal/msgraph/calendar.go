@@ -179,3 +179,18 @@ func (s *CalendarService) CreateEvent(userID string, event models.CalendarEvent)
 	event.Source = "outlook"
 	return event, nil
 }
+
+// RespondToEvent accepts, declines, or tentatively accepts a calendar event.
+// response: "accept", "decline", or "tentativelyAccept"
+func (s *CalendarService) RespondToEvent(userID, eventID, response string) error {
+	if !s.client.IsConfigured() {
+		return fmt.Errorf("Graph client not configured")
+	}
+
+	path := fmt.Sprintf("/users/%s/events/%s/%s", userID, eventID, response)
+	payload := map[string]interface{}{
+		"sendResponse": true,
+	}
+	_, err := s.client.Post(path, payload)
+	return err
+}

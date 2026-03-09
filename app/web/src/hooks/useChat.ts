@@ -74,5 +74,10 @@ export function useChat() {
     setMessages([])
   }, [])
 
-  return { messages, loading, sendMessage, clearMessages }
+  const loadMessages = useCallback((msgs: ChatMessage[]) => {
+    abortRef.current?.abort()
+    setMessages(msgs)
+  }, [])
+
+  return { messages, loading, sendMessage, clearMessages, loadMessages }
 }

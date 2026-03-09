@@ -165,6 +165,92 @@ func (h *Handler) scheduleToCalendarEvents(role, company string, start, end time
 	return events
 }
 
+// handleSendMail sends an email via Outlook (or no-op in demo mode).
+func (h *Handler) handleSendMail(w http.ResponseWriter, r *http.Request) {
+	role := middleware.GetRole(r.Context())
+
+	var req struct {
+		To      []string `json:"to"`
+		Subject string   `json:"subject"`
+		Body    string   `json:"body"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "invalid request body")
+		return
+	}
+	if len(req.To) == 0 || req.Subject == "" {
+		writeError(w, 400, "to and subject are required")
+		return
+	}
+
+	if err := h.calendarProvider.SendMail(role, req.To, req.Subject, req.Body); err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+
+	writeJSON(w, 200, map[string]string{"status": "sent"})
+}
+
+// handleReplyMail replies to an existing message.
+func (h *Handler) handleReplyMail(w http.ResponseWriter, r *http.Request) {
+	role := middleware.GetRole(r.Context())
+	messageID := r.PathValue("id")
+	if messageID == "" {
+		writeError(w, 400, "message ID required")
+		return
+	}
+
+	var req struct {
+		Body string `json:"body"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "invalid request body")
+		return
+	}
+	if req.Body == "" {
+		writeError(w, 400, "body is required")
+		return
+	}
+
+	if err := h.calendarProvider.ReplyToMail(role, messageID, req.Body); err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+
+	writeJSON(w, 200, map[string]string{"status": "sent"})
+}
+
+// handleRespondEvent accepts, declines, or tentatively accepts a calendar event.
+func (h *Handler) handleRespondEvent(w http.ResponseWriter, r *http.Request) {
+	role := middleware.GetRole(r.Context())
+	eventID := r.PathValue("id")
+	if eventID == "" {
+		writeError(w, 400, "event ID required")
+		return
+	}
+
+	var req struct {
+		Response string `json:"response"` // "accept", "decline", "tentativelyAccept"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "invalid request body")
+		return
+	}
+
+	valid := map[string]bool{"accept": true, "decline": true, "tentativelyAccept": true}
+	if !valid[req.Response] {
+		writeError(w, 400, "response must be accept, decline, or tentativelyAccept")
+		return
+	}
+
+	if err := h.calendarProvider.RespondToEvent(role, eventID, req.Response); err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+
+	writeJSON(w, 200, map[string]string{"status": req.Response})
+}
+
 // milToISO converts military time "0700" to ISO "07:00:00".
 func milToISO(mil string) string {
 	if len(mil) == 4 {

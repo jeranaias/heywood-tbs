@@ -137,7 +137,49 @@ func (s *SQLStore) migrations() []migration {
 				`CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id)`,
 			},
 		},
-		// Future migrations go here as {version: 2, stmts: [...]}, etc.
+		{
+			version: 2,
+			stmts: []string{
+				`CREATE TABLE IF NOT EXISTS student_notes (
+					id TEXT PRIMARY KEY,
+					student_id TEXT NOT NULL,
+					author_role TEXT NOT NULL,
+					author_name TEXT DEFAULT '',
+					content TEXT NOT NULL,
+					type TEXT NOT NULL DEFAULT 'note',
+					created_at TEXT NOT NULL
+				)`,
+				`CREATE INDEX IF NOT EXISTS idx_student_notes_student ON student_notes(student_id)`,
+			},
+		},
+		{
+			version: 3,
+			stmts: []string{
+				`CREATE TABLE IF NOT EXISTS counseling_sessions (
+					id TEXT PRIMARY KEY,
+					student_id TEXT NOT NULL,
+					student_name TEXT DEFAULT '',
+					counselor_role TEXT NOT NULL,
+					counselor_name TEXT DEFAULT '',
+					date TEXT DEFAULT '',
+					type TEXT NOT NULL DEFAULT 'initial',
+					outline TEXT DEFAULT '',
+					notes TEXT DEFAULT '',
+					status TEXT NOT NULL DEFAULT 'draft',
+					created_at TEXT NOT NULL,
+					updated_at TEXT NOT NULL
+				)`,
+				`CREATE TABLE IF NOT EXISTS counseling_followups (
+					id INTEGER PRIMARY KEY,
+					session_id TEXT NOT NULL,
+					description TEXT NOT NULL,
+					due_date TEXT DEFAULT '',
+					status TEXT NOT NULL DEFAULT 'pending'
+				)`,
+				`CREATE INDEX IF NOT EXISTS idx_counseling_student ON counseling_sessions(student_id)`,
+				`CREATE INDEX IF NOT EXISTS idx_counseling_followups_session ON counseling_followups(session_id)`,
+			},
+		},
 	}
 }
 
@@ -303,6 +345,21 @@ func (s *SQLStore) UpdateTask(id string, req models.TaskUpdateRequest) error {
 		args = append(args, *req.AssignedTo)
 		argN++
 	}
+	if req.Title != nil {
+		sets = append(sets, fmt.Sprintf("title = $%d", argN))
+		args = append(args, *req.Title)
+		argN++
+	}
+	if req.Description != nil {
+		sets = append(sets, fmt.Sprintf("description = $%d", argN))
+		args = append(args, *req.Description)
+		argN++
+	}
+	if req.DueDate != nil {
+		sets = append(sets, fmt.Sprintf("due_date = $%d", argN))
+		args = append(args, *req.DueDate)
+		argN++
+	}
 
 	if len(sets) == 0 {
 		return nil
@@ -324,6 +381,200 @@ func (s *SQLStore) UpdateTask(id string, req models.TaskUpdateRequest) error {
 		return fmt.Errorf("task %s not found", id)
 	}
 	return nil
+}
+
+func (s *SQLStore) DeleteTask(id string) error {
+	result, err := s.db.Exec("DELETE FROM tasks WHERE id = $1", id)
+	if err != nil {
+		return err
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("task %s not found", id)
+	}
+	return nil
+}
+
+// --- Student operations ---
+
+func (s *SQLStore) UpdateStudent(id string, req models.StudentUpdateRequest) error {
+	// Student data is in-memory (reference data from JSON), so delegate to embedded store.
+	return s.Store.UpdateStudent(id, req)
+}
+
+func (s *SQLStore) CreateStudentNote(note models.StudentNote) error {
+	if note.ID == "" {
+		note.ID = fmt.Sprintf("NOTE-%03d", s.incrementID())
+	}
+	if note.CreatedAt == "" {
+		note.CreatedAt = time.Now().Format(time.RFC3339)
+	}
+	_, err := s.db.Exec(
+		`INSERT INTO student_notes (id, student_id, author_role, author_name, content, type, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		note.ID, note.StudentID, note.AuthorRole, note.AuthorName, note.Content, note.Type, note.CreatedAt,
+	)
+	return err
+}
+
+func (s *SQLStore) ListStudentNotes(studentID string) []models.StudentNote {
+	rows, err := s.db.Query(
+		`SELECT id, student_id, author_role, author_name, content, type, created_at
+		 FROM student_notes WHERE student_id = $1 ORDER BY created_at DESC`, studentID)
+	if err != nil {
+		slog.Error("list student notes", "error", err)
+		return nil
+	}
+	defer rows.Close()
+
+	var notes []models.StudentNote
+	for rows.Next() {
+		var n models.StudentNote
+		if err := rows.Scan(&n.ID, &n.StudentID, &n.AuthorRole, &n.AuthorName, &n.Content, &n.Type, &n.CreatedAt); err != nil {
+			slog.Error("scan student note", "error", err)
+			continue
+		}
+		notes = append(notes, n)
+	}
+	return notes
+}
+
+// --- Counseling operations ---
+
+func (s *SQLStore) CreateCounseling(session models.CounselingSession) error {
+	if session.ID == "" {
+		session.ID = fmt.Sprintf("COUNS-%03d", s.incrementID())
+	}
+	now := time.Now().Format(time.RFC3339)
+	if session.CreatedAt == "" {
+		session.CreatedAt = now
+	}
+	if session.UpdatedAt == "" {
+		session.UpdatedAt = now
+	}
+	if session.Status == "" {
+		session.Status = "draft"
+	}
+
+	_, err := s.db.Exec(
+		`INSERT INTO counseling_sessions (id, student_id, student_name, counselor_role, counselor_name, date, type, outline, notes, status, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+		session.ID, session.StudentID, session.StudentName, session.CounselorRole,
+		session.CounselorName, session.Date, session.Type, session.Outline,
+		session.Notes, session.Status, session.CreatedAt, session.UpdatedAt,
+	)
+	if err != nil {
+		return err
+	}
+
+	for _, fu := range session.FollowUps {
+		_, err := s.db.Exec(
+			`INSERT INTO counseling_followups (session_id, description, due_date, status)
+			 VALUES ($1, $2, $3, $4)`,
+			session.ID, fu.Description, fu.DueDate, fu.Status,
+		)
+		if err != nil {
+			slog.Error("insert counseling followup", "error", err)
+		}
+	}
+
+	return nil
+}
+
+func (s *SQLStore) ListCounselings(studentID string) []models.CounselingSession {
+	var rows *sql.Rows
+	var err error
+
+	if studentID != "" {
+		rows, err = s.db.Query(
+			`SELECT id, student_id, student_name, counselor_role, counselor_name, date, type, outline, notes, status, created_at, updated_at
+			 FROM counseling_sessions WHERE student_id = $1 ORDER BY created_at DESC`, studentID)
+	} else {
+		rows, err = s.db.Query(
+			`SELECT id, student_id, student_name, counselor_role, counselor_name, date, type, outline, notes, status, created_at, updated_at
+			 FROM counseling_sessions ORDER BY created_at DESC`)
+	}
+	if err != nil {
+		slog.Error("list counselings", "error", err)
+		return nil
+	}
+	defer rows.Close()
+
+	var sessions []models.CounselingSession
+	for rows.Next() {
+		var c models.CounselingSession
+		if err := rows.Scan(&c.ID, &c.StudentID, &c.StudentName, &c.CounselorRole,
+			&c.CounselorName, &c.Date, &c.Type, &c.Outline, &c.Notes,
+			&c.Status, &c.CreatedAt, &c.UpdatedAt); err != nil {
+			slog.Error("scan counseling", "error", err)
+			continue
+		}
+		c.FollowUps = s.loadFollowUps(c.ID)
+		sessions = append(sessions, c)
+	}
+	return sessions
+}
+
+func (s *SQLStore) GetCounseling(id string) (*models.CounselingSession, bool) {
+	var c models.CounselingSession
+	err := s.db.QueryRow(
+		`SELECT id, student_id, student_name, counselor_role, counselor_name, date, type, outline, notes, status, created_at, updated_at
+		 FROM counseling_sessions WHERE id = $1`, id).Scan(
+		&c.ID, &c.StudentID, &c.StudentName, &c.CounselorRole,
+		&c.CounselorName, &c.Date, &c.Type, &c.Outline, &c.Notes,
+		&c.Status, &c.CreatedAt, &c.UpdatedAt)
+	if err != nil {
+		return nil, false
+	}
+	c.FollowUps = s.loadFollowUps(c.ID)
+	return &c, true
+}
+
+func (s *SQLStore) UpdateCounseling(id string, session models.CounselingSession) error {
+	session.UpdatedAt = time.Now().Format(time.RFC3339)
+	result, err := s.db.Exec(
+		`UPDATE counseling_sessions SET student_name=$1, counselor_role=$2, counselor_name=$3, date=$4, type=$5, outline=$6, notes=$7, status=$8, updated_at=$9
+		 WHERE id=$10`,
+		session.StudentName, session.CounselorRole, session.CounselorName,
+		session.Date, session.Type, session.Outline, session.Notes,
+		session.Status, session.UpdatedAt, id)
+	if err != nil {
+		return err
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("counseling session %s not found", id)
+	}
+
+	// Replace follow-ups
+	s.db.Exec("DELETE FROM counseling_followups WHERE session_id = $1", id)
+	for _, fu := range session.FollowUps {
+		s.db.Exec(
+			`INSERT INTO counseling_followups (session_id, description, due_date, status)
+			 VALUES ($1, $2, $3, $4)`,
+			id, fu.Description, fu.DueDate, fu.Status)
+	}
+
+	return nil
+}
+
+func (s *SQLStore) loadFollowUps(sessionID string) []models.FollowUp {
+	rows, err := s.db.Query(
+		`SELECT description, due_date, status FROM counseling_followups WHERE session_id = $1`, sessionID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var followUps []models.FollowUp
+	for rows.Next() {
+		var fu models.FollowUp
+		if err := rows.Scan(&fu.Description, &fu.DueDate, &fu.Status); err != nil {
+			continue
+		}
+		followUps = append(followUps, fu)
+	}
+	return followUps
 }
 
 // --- Message operations ---

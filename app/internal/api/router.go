@@ -35,6 +35,9 @@ type Handler struct {
 	// Settings file
 	settingsPath string
 	settingsMu   sync.RWMutex
+
+	// SSE broker for real-time notifications
+	sseBroker *SSEBroker
 }
 
 // NewHandler creates a new API handler.
@@ -69,6 +72,7 @@ func NewHandler(
 		sharePointSvc:    sharePointSvc,
 		teamsSvc:         teamsSvc,
 		settingsPath:     settingsPath,
+		sseBroker:        NewSSEBroker(),
 	}
 }
 
@@ -84,6 +88,16 @@ func SetupRouter(h *Handler) *http.ServeMux {
 	mux.HandleFunc("GET /api/v1/students/stats", h.handleStudentStats)
 	mux.HandleFunc("GET /api/v1/students/at-risk", h.handleAtRisk)
 	mux.HandleFunc("GET /api/v1/students/{id}", h.handleGetStudent)
+	mux.HandleFunc("PATCH /api/v1/students/{id}", h.handleUpdateStudent)
+	mux.HandleFunc("GET /api/v1/students/{id}/notes", h.handleListStudentNotes)
+	mux.HandleFunc("POST /api/v1/students/{id}/notes", h.handleCreateStudentNote)
+
+	// Counseling
+	mux.HandleFunc("POST /api/v1/counselings", h.handleCreateCounseling)
+	mux.HandleFunc("GET /api/v1/counselings", h.handleListCounselings)
+	mux.HandleFunc("GET /api/v1/counselings/{id}", h.handleGetCounseling)
+	mux.HandleFunc("PUT /api/v1/counselings/{id}", h.handleUpdateCounseling)
+	mux.HandleFunc("POST /api/v1/counselings/generate-outline", h.handleGenerateCounselingOutline)
 
 	// Instructors
 	mux.HandleFunc("GET /api/v1/instructors", h.handleListInstructors)
@@ -96,6 +110,16 @@ func SetupRouter(h *Handler) *http.ServeMux {
 
 	// Schedule
 	mux.HandleFunc("GET /api/v1/schedule", h.handleListSchedule)
+	mux.HandleFunc("POST /api/v1/schedule", h.handleCreateTrainingEvent)
+	mux.HandleFunc("PUT /api/v1/schedule/{id}", h.handleUpdateTrainingEvent)
+	mux.HandleFunc("DELETE /api/v1/schedule/{id}", h.handleDeleteTrainingEvent)
+
+	// Export / Reports
+	mux.HandleFunc("GET /api/v1/export/students", h.handleExportStudents)
+	mux.HandleFunc("GET /api/v1/export/at-risk", h.handleExportAtRisk)
+	mux.HandleFunc("GET /api/v1/export/qual-records", h.handleExportQualRecords)
+	mux.HandleFunc("GET /api/v1/export/counselings", h.handleExportCounselings)
+	mux.HandleFunc("GET /api/v1/reports/company-summary", h.handleCompanyPerformanceSummary)
 
 	// Feedback
 	mux.HandleFunc("GET /api/v1/feedback", h.handleListFeedback)
@@ -107,12 +131,18 @@ func SetupRouter(h *Handler) *http.ServeMux {
 	// Chat history (requires SQL-backed store)
 	mux.HandleFunc("GET /api/v1/chat/sessions", h.handleListChatSessions)
 	mux.HandleFunc("GET /api/v1/chat/sessions/{id}/messages", h.handleGetChatMessages)
+	mux.HandleFunc("GET /api/v1/chat/sessions/{id}/export", h.handleExportChatSession)
 	mux.HandleFunc("DELETE /api/v1/chat/sessions/{id}", h.handleDeleteChatSession)
+
+	// Chat suggestions (role-specific prompts)
+	mux.HandleFunc("GET /api/v1/chat/suggestions", h.handleSuggestedPrompts)
 
 	// Tasks
 	mux.HandleFunc("GET /api/v1/tasks", h.handleListTasks)
+	mux.HandleFunc("POST /api/v1/tasks", h.handleCreateTask)
 	mux.HandleFunc("GET /api/v1/tasks/{id}", h.handleGetTask)
 	mux.HandleFunc("PATCH /api/v1/tasks/{id}", h.handleUpdateTask)
+	mux.HandleFunc("DELETE /api/v1/tasks/{id}", h.handleDeleteTask)
 
 	// Messages
 	mux.HandleFunc("GET /api/v1/messages", h.handleListMessages)
@@ -133,6 +163,12 @@ func SetupRouter(h *Handler) *http.ServeMux {
 	mux.HandleFunc("GET /api/v1/calendar/today", h.handleCalendarToday)
 	mux.HandleFunc("GET /api/v1/mail/summary", h.handleMailSummary)
 	mux.HandleFunc("GET /api/v1/mail/unread-count", h.handleMailUnreadCount)
+	mux.HandleFunc("POST /api/v1/mail/send", h.handleSendMail)
+	mux.HandleFunc("POST /api/v1/mail/{id}/reply", h.handleReplyMail)
+	mux.HandleFunc("POST /api/v1/calendar/events/{id}/respond", h.handleRespondEvent)
+
+	// Server-Sent Events (real-time notifications)
+	mux.HandleFunc("GET /api/v1/events/stream", h.handleSSE)
 
 	// Settings (XO/Staff only — enforced in handlers)
 	mux.HandleFunc("GET /api/v1/settings", h.handleGetSettings)

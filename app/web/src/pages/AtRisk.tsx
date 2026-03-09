@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { api } from '../lib/api'
 import type { Student } from '../lib/types'
 import { StudentRoster } from '../components/students/StudentRoster'
+import { ExportButton } from '../components/common/ExportButton'
 import { AlertTriangle } from 'lucide-react'
 
 export function AtRisk() {
@@ -29,6 +30,10 @@ export function AtRisk() {
           <h2 className="text-xl font-bold text-slate-900">At-Risk Students</h2>
           <p className="text-sm text-slate-500">{students.length} students flagged — any pillar below 75 or negative trend</p>
         </div>
+      </div>
+
+      <div className="flex justify-end">
+        <ExportButton url="/api/v1/export/at-risk" filename="at-risk-students.csv" />
       </div>
 
       <StudentRoster students={students} />

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { api } from '../lib/api'
 import type { Student } from '../lib/types'
 import { StudentRoster } from '../components/students/StudentRoster'
+import { ExportButton } from '../components/common/ExportButton'
 import { Search, Users } from 'lucide-react'
 
 export function StudentsPage() {
@@ -48,9 +49,12 @@ export function StudentsPage() {
             {students.length} student{students.length !== 1 ? 's' : ''} shown
           </p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-slate-500">
-          <Users className="w-4 h-4" />
-          Alpha Company — Class 1-26
+        <div className="flex items-center gap-3">
+          <ExportButton url="/api/v1/export/students" filename="students.csv" />
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <Users className="w-4 h-4" />
+            Alpha Company — Class 1-26
+          </div>
         </div>
       </div>
 

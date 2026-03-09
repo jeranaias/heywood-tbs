@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { ClipboardList, Mail, Clock, CheckCircle2, AlertCircle, ChevronRight } from 'lucide-react'
+import { ClipboardList, Mail, Clock, CheckCircle2, AlertCircle, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { api } from '../lib/api'
+import { TaskCreateForm } from '../components/tasks/TaskCreateForm'
 import type { Task, Message } from '../lib/types'
 
 type TabType = 'tasks' | 'messages'
@@ -13,6 +14,7 @@ export function TasksPage() {
   const [filter, setFilter] = useState<FilterType>('all')
   const [loading, setLoading] = useState(true)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+  const [showCreateForm, setShowCreateForm] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
@@ -45,6 +47,16 @@ export function TasksPage() {
       }
     } catch (err) {
       console.error('Failed to update task:', err)
+    }
+  }
+
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      await api.deleteTask(taskId)
+      if (selectedTask?.id === taskId) setSelectedTask(null)
+      await loadData()
+    } catch (err) {
+      console.error('Failed to delete task:', err)
     }
   }
 
@@ -85,9 +97,17 @@ export function TasksPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Task Inbox</h1>
-        <p className="text-sm text-slate-500 mt-1">Tasks and messages from Heywood</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Task Inbox</h1>
+          <p className="text-sm text-slate-500 mt-1">Tasks and messages from Heywood</p>
+        </div>
+        <button
+          onClick={() => setShowCreateForm(true)}
+          className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-[var(--color-navy)] text-white rounded-lg hover:bg-[var(--color-navy-light)] transition-colors"
+        >
+          <Plus className="w-4 h-4" /> New Task
+        </button>
       </div>
 
       {/* Tabs */}
@@ -149,7 +169,7 @@ export function TasksPage() {
           {filteredTasks.length === 0 ? (
             <div className="text-center py-12 text-slate-500">
               <ClipboardList className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-              <p>No tasks yet. Heywood will create tasks when you give orders.</p>
+              <p>No tasks yet. Create one or ask Heywood to generate tasks.</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -212,6 +232,13 @@ export function TasksPage() {
                             Reopen
                           </button>
                         )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id) }}
+                          className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 rounded-lg hover:bg-red-100 ml-auto"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 inline mr-1" />
+                          Delete
+                        </button>
                       </div>
                     </div>
                   )}
@@ -260,6 +287,13 @@ export function TasksPage() {
             ))
           )}
         </div>
+      )}
+
+      {showCreateForm && (
+        <TaskCreateForm
+          onCreated={() => { setShowCreateForm(false); loadData() }}
+          onClose={() => setShowCreateForm(false)}
+        />
       )}
     </div>
   )

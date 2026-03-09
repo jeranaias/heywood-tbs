@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"heywood-tbs/internal/auth"
 	"heywood-tbs/internal/middleware"
+	"heywood-tbs/internal/models"
 )
 
 // withFullContext returns a request with role, company, and studentID injected into context.
@@ -429,5 +431,159 @@ func TestAtRisk_StaffFull(t *testing.T) {
 
 	if resp.Total == 0 {
 		t.Error("expected at least some at-risk students for staff view")
+	}
+}
+
+// --- Sprint 13: Student Notes + Risk Flags ---
+
+func TestUpdateStudent_SetAtRisk(t *testing.T) {
+	h := newTestHandler(t)
+
+	// STU-001 may or may not be at-risk — set it explicitly to true
+	body := `{"atRisk":true,"riskFlags":["low PFT","exam failure"]}`
+	req := httptest.NewRequest("PATCH", "/api/v1/students/STU-001", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", "STU-001")
+	req = withFullContext(req, auth.RoleStaff, "", "")
+	rec := httptest.NewRecorder()
+
+	h.handleUpdateStudent(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var updated models.Student
+	json.NewDecoder(rec.Body).Decode(&updated)
+
+	if !updated.AtRisk {
+		t.Error("expected atRisk=true after update")
+	}
+	if len(updated.RiskFlags) != 2 || updated.RiskFlags[0] != "low PFT" {
+		t.Errorf("expected riskFlags=[low PFT, exam failure], got %v", updated.RiskFlags)
+	}
+}
+
+func TestUpdateStudent_AddRiskFlag(t *testing.T) {
+	h := newTestHandler(t)
+
+	// Set initial flags
+	body := `{"riskFlags":["initial flag"]}`
+	req := httptest.NewRequest("PATCH", "/api/v1/students/STU-001", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", "STU-001")
+	req = withFullContext(req, auth.RoleStaff, "", "")
+	rec := httptest.NewRecorder()
+	h.handleUpdateStudent(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	// Now add more flags
+	body = `{"riskFlags":["initial flag","new flag"]}`
+	req = httptest.NewRequest("PATCH", "/api/v1/students/STU-001", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", "STU-001")
+	req = withFullContext(req, auth.RoleStaff, "", "")
+	rec = httptest.NewRecorder()
+	h.handleUpdateStudent(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var updated models.Student
+	json.NewDecoder(rec.Body).Decode(&updated)
+	if len(updated.RiskFlags) != 2 {
+		t.Errorf("expected 2 risk flags, got %d", len(updated.RiskFlags))
+	}
+}
+
+func TestCreateStudentNote(t *testing.T) {
+	h := newTestHandler(t)
+
+	body := `{"content":"Student showed improvement in land nav this week","type":"observation"}`
+	req := httptest.NewRequest("POST", "/api/v1/students/STU-001/notes", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", "STU-001")
+
+	ctx := withIdentityContext(&auth.UserIdentity{
+		ID: "demo-staff", Role: auth.RoleStaff, Name: "SSgt Jones", Source: "demo",
+	}, "")
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	h.handleCreateStudentNote(rec, req)
+
+	if rec.Code != 201 {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Notes []models.StudentNote `json:"notes"`
+	}
+	json.NewDecoder(rec.Body).Decode(&resp)
+
+	if len(resp.Notes) != 1 {
+		t.Fatalf("expected 1 note, got %d", len(resp.Notes))
+	}
+	if resp.Notes[0].Type != "observation" {
+		t.Errorf("expected type 'observation', got %q", resp.Notes[0].Type)
+	}
+	if resp.Notes[0].StudentID != "STU-001" {
+		t.Errorf("expected studentID 'STU-001', got %q", resp.Notes[0].StudentID)
+	}
+}
+
+func TestListStudentNotes(t *testing.T) {
+	h := newTestHandler(t)
+
+	// Create two notes
+	h.store.CreateStudentNote(models.StudentNote{
+		StudentID: "STU-001", AuthorRole: "staff", Content: "Note 1", Type: "note",
+	})
+	h.store.CreateStudentNote(models.StudentNote{
+		StudentID: "STU-001", AuthorRole: "spc", Content: "Note 2", Type: "counseling-note",
+	})
+	h.store.CreateStudentNote(models.StudentNote{
+		StudentID: "STU-002", AuthorRole: "staff", Content: "Note for different student", Type: "note",
+	})
+
+	req := httptest.NewRequest("GET", "/api/v1/students/STU-001/notes", nil)
+	req.SetPathValue("id", "STU-001")
+	req = withFullContext(req, auth.RoleStaff, "", "")
+	rec := httptest.NewRecorder()
+
+	h.handleListStudentNotes(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Notes []models.StudentNote `json:"notes"`
+	}
+	json.NewDecoder(rec.Body).Decode(&resp)
+
+	if len(resp.Notes) != 2 {
+		t.Errorf("expected 2 notes for STU-001, got %d", len(resp.Notes))
+	}
+}
+
+func TestUpdateStudent_StudentRoleDenied(t *testing.T) {
+	h := newTestHandler(t)
+
+	body := `{"atRisk":false}`
+	req := httptest.NewRequest("PATCH", "/api/v1/students/STU-001", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", "STU-001")
+	req = withFullContext(req, auth.RoleStudent, "", "STU-001")
+	rec := httptest.NewRecorder()
+
+	h.handleUpdateStudent(rec, req)
+
+	if rec.Code != 403 {
+		t.Fatalf("expected 403 for student role, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

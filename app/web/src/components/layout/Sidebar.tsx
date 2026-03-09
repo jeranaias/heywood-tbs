@@ -9,6 +9,8 @@ import {
   CalendarDays,
   User,
   ClipboardList,
+  FileText,
+  BarChart3,
   Settings,
 } from 'lucide-react'
 
@@ -25,6 +27,8 @@ export function Sidebar({ role, onClose }: SidebarProps) {
     { to: '/students', label: 'Students', icon: Users, roles: ['xo', 'staff', 'spc'] },
     { to: '/at-risk', label: 'At-Risk', icon: AlertTriangle, roles: ['xo', 'staff', 'spc'] },
     { to: '/instructor-quals', label: 'Instructor Quals', icon: Shield, roles: ['xo', 'staff'] },
+    { to: '/counseling', label: 'Counseling', icon: FileText, roles: ['xo', 'staff', 'spc'] },
+    { to: '/reports', label: 'Reports', icon: BarChart3, roles: ['xo', 'staff'] },
     { to: '/schedule', label: 'Schedule', icon: Calendar, roles: ['xo', 'staff', 'spc'] },
     { to: '/calendar', label: 'My Calendar', icon: CalendarDays, roles: ['xo', 'staff', 'spc', 'student'] },
     { to: '/my-record', label: 'My Record', icon: User, roles: ['student'] },

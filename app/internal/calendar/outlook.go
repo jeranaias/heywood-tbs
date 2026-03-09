@@ -1,6 +1,7 @@
 package calendar
 
 import (
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -15,6 +16,9 @@ type CalendarProvider interface {
 	GetEvents(role, company string, start, end time.Time) []models.CalendarEvent
 	GetMailSummary(role string) []models.MailSummary
 	CreateEvent(event models.CalendarEvent) (models.CalendarEvent, error)
+	SendMail(role string, to []string, subject, body string) error
+	ReplyToMail(role string, messageID, body string) error
+	RespondToEvent(role string, eventID, response string) error
 }
 
 // OutlookCalendar connects to Microsoft Graph API for real calendar/mail data.
@@ -93,6 +97,33 @@ func (o *OutlookCalendar) CreateEvent(event models.CalendarEvent) (models.Calend
 	}
 
 	return o.calSvc.CreateEvent(userID, event)
+}
+
+// SendMail sends an email via Outlook.
+func (o *OutlookCalendar) SendMail(role string, to []string, subject, body string) error {
+	userID := o.resolveUser(role, "")
+	if userID == "" {
+		return fmt.Errorf("no user mapping for role %s", role)
+	}
+	return o.mailSvc.SendMail(userID, to, subject, body)
+}
+
+// ReplyToMail replies to a message in Outlook.
+func (o *OutlookCalendar) ReplyToMail(role string, messageID, body string) error {
+	userID := o.resolveUser(role, "")
+	if userID == "" {
+		return fmt.Errorf("no user mapping for role %s", role)
+	}
+	return o.mailSvc.ReplyToMail(userID, messageID, body)
+}
+
+// RespondToEvent accepts, declines, or tentatively accepts a calendar event.
+func (o *OutlookCalendar) RespondToEvent(role string, eventID, response string) error {
+	userID := o.resolveUser(role, "")
+	if userID == "" {
+		return fmt.Errorf("no user mapping for role %s", role)
+	}
+	return o.calSvc.RespondToEvent(userID, eventID, response)
 }
 
 func (o *OutlookCalendar) resolveUser(role, company string) string {

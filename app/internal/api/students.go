@@ -1,7 +1,9 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
+	"strings"
 
 	"heywood-tbs/internal/auth"
 	"heywood-tbs/internal/middleware"
@@ -107,4 +109,124 @@ func (h *Handler) handleAtRisk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]interface{}{"students": students, "total": len(students)})
+}
+
+func (h *Handler) handleUpdateStudent(w http.ResponseWriter, r *http.Request) {
+	role := middleware.GetRole(r.Context())
+	// Only staff/XO/SPC can update students
+	if role == auth.RoleStudent {
+		writeError(w, 403, "students cannot modify their own records")
+		return
+	}
+
+	id := r.PathValue("id")
+	var req models.StudentUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "invalid request body")
+		return
+	}
+
+	if err := h.store.UpdateStudent(id, req); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			writeError(w, 404, err.Error())
+		} else {
+			writeError(w, 500, err.Error())
+		}
+		return
+	}
+
+	st, _ := h.store.GetStudent(id)
+
+	// Broadcast SSE if risk status changed
+	if h.sseBroker != nil && st != nil && req.AtRisk != nil {
+		h.sseBroker.Broadcast("xo", SSEEvent{
+			Type: "at-risk-alert",
+			Data: map[string]interface{}{
+				"studentId":   st.ID,
+				"studentName": st.Rank + " " + st.LastName,
+				"atRisk":      st.AtRisk,
+				"riskFlags":   st.RiskFlags,
+				"message":     st.Rank + " " + st.LastName + " risk status updated",
+			},
+		})
+		h.sseBroker.Broadcast("staff", SSEEvent{
+			Type: "at-risk-alert",
+			Data: map[string]interface{}{
+				"studentId":   st.ID,
+				"studentName": st.Rank + " " + st.LastName,
+				"atRisk":      st.AtRisk,
+				"riskFlags":   st.RiskFlags,
+				"message":     st.Rank + " " + st.LastName + " risk status updated",
+			},
+		})
+	}
+
+	writeJSON(w, 200, st)
+}
+
+func (h *Handler) handleCreateStudentNote(w http.ResponseWriter, r *http.Request) {
+	role := middleware.GetRole(r.Context())
+	if role == auth.RoleStudent {
+		writeError(w, 403, "students cannot create notes")
+		return
+	}
+
+	studentID := r.PathValue("id")
+	// Verify student exists
+	if _, ok := h.store.GetStudent(studentID); !ok {
+		writeError(w, 404, "student not found")
+		return
+	}
+
+	var body struct {
+		Content string `json:"content"`
+		Type    string `json:"type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, 400, "invalid request body")
+		return
+	}
+
+	if strings.TrimSpace(body.Content) == "" {
+		writeError(w, 400, "content is required")
+		return
+	}
+
+	noteType := body.Type
+	if noteType == "" {
+		noteType = "note"
+	}
+
+	identity := middleware.GetIdentity(r.Context())
+	note := models.StudentNote{
+		StudentID:  studentID,
+		AuthorRole: role,
+		AuthorName: identity.Name,
+		Content:    body.Content,
+		Type:       noteType,
+	}
+
+	if err := h.store.CreateStudentNote(note); err != nil {
+		writeError(w, 500, "failed to create note")
+		return
+	}
+
+	// Return the new list of notes
+	notes := h.store.ListStudentNotes(studentID)
+	writeJSON(w, 201, map[string]interface{}{"notes": notes})
+}
+
+func (h *Handler) handleListStudentNotes(w http.ResponseWriter, r *http.Request) {
+	role := middleware.GetRole(r.Context())
+	if role == auth.RoleStudent {
+		writeError(w, 403, "access denied")
+		return
+	}
+
+	studentID := r.PathValue("id")
+	notes := h.store.ListStudentNotes(studentID)
+	if notes == nil {
+		notes = []models.StudentNote{}
+	}
+	writeJSON(w, 200, map[string]interface{}{"notes": notes})
 }

@@ -1,14 +1,16 @@
 import { useEffect, useRef } from 'react'
 import type { ChatMessage } from '../../lib/types'
 import { ChatMessageBubble } from './ChatMessage'
+import { SuggestedPrompts } from './SuggestedPrompts'
 import { Loader2 } from 'lucide-react'
 
 interface ChatHistoryProps {
   messages: ChatMessage[]
   loading: boolean
+  onSuggestedPrompt?: (prompt: string) => void
 }
 
-export function ChatHistory({ messages, loading }: ChatHistoryProps) {
+export function ChatHistory({ messages, loading, onSuggestedPrompt }: ChatHistoryProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -27,6 +29,9 @@ export function ChatHistory({ messages, loading }: ChatHistoryProps) {
             Ask about student performance, prepare counseling outlines, analyze AARs,
             or generate training scenarios.
           </p>
+          {onSuggestedPrompt && (
+            <SuggestedPrompts onSelect={onSuggestedPrompt} />
+          )}
         </div>
       </div>
     )

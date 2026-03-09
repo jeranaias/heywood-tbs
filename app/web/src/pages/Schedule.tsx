@@ -1,19 +1,42 @@
 import { useState, useEffect } from 'react'
-import { Calendar, Filter } from 'lucide-react'
+import { Calendar, Filter, Plus, Edit2, Trash2 } from 'lucide-react'
 import { api } from '../lib/api'
 import type { TrainingEvent } from '../lib/types'
+import { useAuth } from '../hooks/useAuth'
+import { EventForm } from '../components/schedule/EventForm'
 
 export function Schedule() {
   const [events, setEvents] = useState<TrainingEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [phaseFilter, setPhaseFilter] = useState('')
+  const [showForm, setShowForm] = useState(false)
+  const [editEvent, setEditEvent] = useState<TrainingEvent | null>(null)
+  const { auth } = useAuth()
+  const canManage = auth.role === 'xo' || auth.role === 'staff'
 
-  useEffect(() => {
+  function loadEvents() {
     api.getSchedule(phaseFilter ? { phase: phaseFilter } : undefined)
       .then(res => setEvents(res.events || []))
       .catch(console.error)
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadEvents()
   }, [phaseFilter])
+
+  async function handleDelete(id: string) {
+    try {
+      await api.deleteTrainingEvent(id)
+      loadEvents()
+    } catch { /* ignore */ }
+  }
+
+  function handleSaved() {
+    setShowForm(false)
+    setEditEvent(null)
+    loadEvents()
+  }
 
   const phases = [...new Set(events.map(e => e.phase))].sort()
 
@@ -59,6 +82,14 @@ export function Schedule() {
               <option key={p} value={p}>{p}</option>
             ))}
           </select>
+          {canManage && (
+            <button
+              onClick={() => { setEditEvent(null); setShowForm(true) }}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium bg-[var(--color-navy)] text-white rounded-lg hover:bg-[var(--color-navy-light)]"
+            >
+              <Plus className="w-4 h-4" /> New Event
+            </button>
+          )}
         </div>
       </div>
 
@@ -100,11 +131,37 @@ export function Schedule() {
                   evt.status === 'Scheduled' ? 'text-blue-600' :
                   'text-slate-500'
                 }`}>{evt.status}</span>
+                {canManage && (
+                  <div className="flex gap-1 mt-1">
+                    <button
+                      onClick={() => { setEditEvent(evt); setShowForm(true) }}
+                      className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded"
+                      title="Edit"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(evt.id)}
+                      className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         ))}
       </div>
+
+      {showForm && (
+        <EventForm
+          event={editEvent}
+          onSave={handleSaved}
+          onCancel={() => { setShowForm(false); setEditEvent(null) }}
+        />
+      )}
     </div>
   )
 }

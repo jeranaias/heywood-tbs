@@ -38,6 +38,69 @@ func (h *Handler) handleGetTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, task)
 }
 
+func (h *Handler) handleCreateTask(w http.ResponseWriter, r *http.Request) {
+	var req models.TaskCreateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "invalid request body")
+		return
+	}
+
+	if strings.TrimSpace(req.Title) == "" {
+		writeError(w, 400, "title is required")
+		return
+	}
+
+	role := middleware.GetRole(r.Context())
+	task := models.Task{
+		Title:       req.Title,
+		Description: req.Description,
+		AssignedTo:  req.AssignedTo,
+		CreatedBy:   role,
+		Priority:    req.Priority,
+		DueDate:     req.DueDate,
+		RelatedID:   req.RelatedID,
+	}
+	if task.Priority == "" {
+		task.Priority = "medium"
+	}
+
+	if err := h.store.CreateTask(task); err != nil {
+		writeError(w, 500, "failed to create task")
+		return
+	}
+
+	// Return the most recently created task
+	tasks := h.store.ListTasks("")
+	if len(tasks) > 0 {
+		// Broadcast task creation via SSE
+		if h.sseBroker != nil {
+			h.sseBroker.Broadcast("", SSEEvent{
+				Type: "task",
+				Data: map[string]interface{}{
+					"action": "created",
+					"task":   tasks[0],
+				},
+			})
+		}
+		writeJSON(w, 201, tasks[0]) // tasks sorted by created_at desc in SQL, last in slice for memory
+	} else {
+		writeJSON(w, 201, map[string]string{"status": "created"})
+	}
+}
+
+func (h *Handler) handleDeleteTask(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := h.store.DeleteTask(id); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			writeError(w, 404, err.Error())
+		} else {
+			writeError(w, 500, err.Error())
+		}
+		return
+	}
+	writeJSON(w, 200, map[string]string{"status": "deleted"})
+}
+
 func (h *Handler) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req models.TaskUpdateRequest
@@ -56,6 +119,18 @@ func (h *Handler) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	task, _ := h.store.GetTask(id)
+
+	// Broadcast task update via SSE
+	if h.sseBroker != nil && task != nil {
+		h.sseBroker.Broadcast("", SSEEvent{
+			Type: "task",
+			Data: map[string]interface{}{
+				"action": "updated",
+				"task":   task,
+			},
+		})
+	}
+
 	writeJSON(w, 200, task)
 }
 

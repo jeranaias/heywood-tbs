@@ -109,3 +109,46 @@ func (s *MailService) UnreadCount(userID string) (int, error) {
 
 	return resp.UnreadItemCount, nil
 }
+
+// SendMail sends an email via Microsoft Graph on behalf of a user.
+// Uses POST /users/{id}/sendMail
+func (s *MailService) SendMail(userID string, to []string, subject, body string) error {
+	if !s.client.IsConfigured() {
+		return fmt.Errorf("graph client not configured")
+	}
+
+	recipients := make([]map[string]interface{}, len(to))
+	for i, addr := range to {
+		recipients[i] = map[string]interface{}{
+			"emailAddress": map[string]string{"address": addr},
+		}
+	}
+
+	payload := map[string]interface{}{
+		"message": map[string]interface{}{
+			"subject":      subject,
+			"body":         map[string]string{"contentType": "Text", "content": body},
+			"toRecipients": recipients,
+		},
+	}
+
+	path := fmt.Sprintf("/users/%s/sendMail", userID)
+	_, err := s.client.Post(path, payload)
+	return err
+}
+
+// ReplyToMail replies to a message via Microsoft Graph.
+// Uses POST /users/{id}/messages/{messageId}/reply
+func (s *MailService) ReplyToMail(userID, messageID, comment string) error {
+	if !s.client.IsConfigured() {
+		return fmt.Errorf("graph client not configured")
+	}
+
+	payload := map[string]interface{}{
+		"comment": comment,
+	}
+
+	path := fmt.Sprintf("/users/%s/messages/%s/reply", userID, messageID)
+	_, err := s.client.Post(path, payload)
+	return err
+}

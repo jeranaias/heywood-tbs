@@ -10,15 +10,17 @@ import { AppShell } from './components/layout/AppShell'
 import { Dashboard } from './pages/Dashboard'
 import { StudentsPage } from './pages/StudentsPage'
 import { AtRisk } from './pages/AtRisk'
-import { ChatPage } from './pages/ChatPage'
 import { MyRecord } from './pages/MyRecord'
 
 // Lazy loaded — visited less frequently
+const ChatPage = lazy(() => import('./pages/ChatPage').then(m => ({ default: m.ChatPage })))
 const StudentDetailPage = lazy(() => import('./pages/StudentDetailPage').then(m => ({ default: m.StudentDetailPage })))
 const InstructorQuals = lazy(() => import('./pages/InstructorQuals').then(m => ({ default: m.InstructorQuals })))
 const Schedule = lazy(() => import('./pages/Schedule').then(m => ({ default: m.Schedule })))
 const TasksPage = lazy(() => import('./pages/TasksPage').then(m => ({ default: m.TasksPage })))
 const CalendarPage = lazy(() => import('./pages/CalendarPage').then(m => ({ default: m.CalendarPage })))
+const CounselingPage = lazy(() => import('./pages/CounselingPage').then(m => ({ default: m.CounselingPage })))
+const ReportsPage = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })))
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })))
 
 function App() {
@@ -39,6 +41,8 @@ function App() {
                 <Route path="/instructor-quals" element={<InstructorQuals />} />
                 <Route path="/schedule" element={<Schedule />} />
                 <Route path="/tasks" element={<TasksPage />} />
+                <Route path="/counseling" element={<CounselingPage />} />
+                <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/my-record" element={<MyRecord />} />
                 <Route path="/calendar" element={<CalendarPage />} />
                 <Route path="/settings" element={<SettingsPage />} />

@@ -22,12 +22,20 @@ type DataStore interface {
 	// Read operations
 	ListStudents(company, phase, search string, atRiskOnly bool) []models.Student
 	GetStudent(id string) (*models.Student, bool)
+	UpdateStudent(id string, req models.StudentUpdateRequest) error
+
+	// Student notes
+	CreateStudentNote(note models.StudentNote) error
+	ListStudentNotes(studentID string) []models.StudentNote
 	StudentStats(company string) models.StudentStats
 	AtRiskStudents(company string) []models.Student
 	ListInstructors(company string) []models.Instructor
 	GetInstructor(id string) (*models.Instructor, bool)
 	QualStats() models.QualStats
 	ListSchedule(phase string) []models.TrainingEvent
+	CreateTrainingEvent(event models.TrainingEvent) error
+	UpdateTrainingEvent(id string, event models.TrainingEvent) error
+	DeleteTrainingEvent(id string) error
 	TodaySchedule(today string) []models.TrainingEvent
 	ThisWeekSchedule(today string) []models.TrainingEvent
 	ListFeedback(eventCode string) []models.EventFeedback
@@ -40,11 +48,18 @@ type DataStore interface {
 	// Exam results
 	GetExamResults(studentID string, examNum int) *models.ExamResult
 
+	// Counseling operations
+	CreateCounseling(session models.CounselingSession) error
+	ListCounselings(studentID string) []models.CounselingSession
+	GetCounseling(id string) (*models.CounselingSession, bool)
+	UpdateCounseling(id string, session models.CounselingSession) error
+
 	// Task operations
 	CreateTask(task models.Task) error
 	ListTasks(assignedTo string) []models.Task
 	GetTask(id string) (*models.Task, bool)
 	UpdateTask(id string, req models.TaskUpdateRequest) error
+	DeleteTask(id string) error
 
 	// Message operations
 	CreateMessage(msg models.Message) error

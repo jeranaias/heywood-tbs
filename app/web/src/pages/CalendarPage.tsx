@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Mail, Clock, MapPin } from 'lucide-react'
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Mail, Clock, MapPin, Send, Check, X as XIcon, HelpCircle } from 'lucide-react'
 import { api } from '../lib/api'
 import type { CalendarEvent, MailSummary } from '../lib/types'
 import { useAuth } from '../hooks/useAuth'
+import { ComposeMailModal } from '../components/mail/ComposeMailModal'
 
 type ViewMode = 'week' | 'day' | 'agenda'
 
@@ -27,6 +28,8 @@ export function CalendarPage() {
   const [view, setView] = useState<ViewMode>('agenda')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
+  const [showCompose, setShowCompose] = useState(false)
+  const [replyTo, setReplyTo] = useState<{ id: string; subject: string; from: string } | null>(null)
 
   const formatDateParam = (d: Date) => d.toISOString().split('T')[0]
 
@@ -107,6 +110,18 @@ export function CalendarPage() {
   }
 
   const roleLabel = auth.role === 'xo' ? 'XO' : auth.role === 'spc' ? 'SPC' : auth.role === 'student' ? 'Student' : 'Staff'
+
+  async function handleRespondEvent(eventId: string, response: 'accept' | 'decline' | 'tentativelyAccept') {
+    try {
+      await api.respondToEvent(eventId, response)
+      loadData()
+    } catch { /* ignore */ }
+  }
+
+  function handleReply(mail: MailSummary) {
+    setReplyTo({ id: mail.id, subject: mail.subject, from: mail.from })
+    setShowCompose(true)
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
@@ -197,8 +212,34 @@ export function CalendarPage() {
                                 )}
                               </div>
                               {/* Expanded detail */}
-                              {selectedEvent?.id === event.id && event.description && (
-                                <p className="mt-2 text-xs text-slate-600 bg-slate-50 p-2 rounded">{event.description}</p>
+                              {selectedEvent?.id === event.id && (
+                                <div className="mt-2 space-y-2">
+                                  {event.description && (
+                                    <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded">{event.description}</p>
+                                  )}
+                                  {event.source === 'outlook' && (
+                                    <div className="flex items-center gap-1.5">
+                                      <button
+                                        onClick={e => { e.stopPropagation(); handleRespondEvent(event.id, 'accept') }}
+                                        className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded hover:bg-green-100"
+                                      >
+                                        <Check className="w-3 h-3" /> Accept
+                                      </button>
+                                      <button
+                                        onClick={e => { e.stopPropagation(); handleRespondEvent(event.id, 'tentativelyAccept') }}
+                                        className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded hover:bg-amber-100"
+                                      >
+                                        <HelpCircle className="w-3 h-3" /> Tentative
+                                      </button>
+                                      <button
+                                        onClick={e => { e.stopPropagation(); handleRespondEvent(event.id, 'decline') }}
+                                        className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded hover:bg-red-100"
+                                      >
+                                        <XIcon className="w-3 h-3" /> Decline
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </div>
@@ -214,14 +255,22 @@ export function CalendarPage() {
         {/* Mail sidebar */}
         <div className="w-72 flex-shrink-0 hidden lg:block space-y-4">
           <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Mail className="w-4 h-4 text-slate-600" />
-              <h3 className="text-sm font-semibold text-slate-700">Outlook Mail</h3>
-              {unreadCount > 0 && (
-                <span className="bg-[var(--color-scarlet)] text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
-                  {unreadCount}
-                </span>
-              )}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Mail className="w-4 h-4 text-slate-600" />
+                <h3 className="text-sm font-semibold text-slate-700">Outlook Mail</h3>
+                {unreadCount > 0 && (
+                  <span className="bg-[var(--color-scarlet)] text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+                    {unreadCount}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => { setReplyTo(null); setShowCompose(true) }}
+                className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-[var(--color-navy)] border border-slate-200 rounded hover:bg-slate-50"
+              >
+                <Send className="w-3 h-3" /> Compose
+              </button>
             </div>
             {mails.length === 0 ? (
               <p className="text-xs text-slate-400">No recent messages</p>
@@ -231,7 +280,14 @@ export function CalendarPage() {
                   <div key={mail.id} className={`text-xs ${mail.isRead ? 'opacity-60' : ''}`}>
                     <div className="flex items-center gap-1.5">
                       {!mail.isRead && <div className="w-1.5 h-1.5 bg-blue-500 rounded-full flex-shrink-0" />}
-                      <span className="font-medium text-slate-700 truncate">{mail.subject}</span>
+                      <span className="font-medium text-slate-700 truncate flex-1">{mail.subject}</span>
+                      <button
+                        onClick={() => handleReply(mail)}
+                        className="flex-shrink-0 p-0.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded"
+                        title="Reply"
+                      >
+                        <Send className="w-3 h-3" />
+                      </button>
                     </div>
                     <div className="text-slate-500 mt-0.5">{mail.from}</div>
                     <div className="text-slate-400 mt-0.5 line-clamp-2">{mail.preview}</div>
@@ -271,6 +327,14 @@ export function CalendarPage() {
           </div>
         </div>
       </div>
+
+      {showCompose && (
+        <ComposeMailModal
+          replyTo={replyTo}
+          onClose={() => { setShowCompose(false); setReplyTo(null) }}
+          onSent={() => { setShowCompose(false); setReplyTo(null); loadData() }}
+        />
+      )}
     </div>
   )
 }

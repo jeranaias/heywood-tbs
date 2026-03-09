@@ -7,6 +7,7 @@ import type { Role } from '../../lib/types'
 
 interface HeaderProps {
   onMenuClick: () => void
+  sseNotifCount?: number
 }
 
 const roles: { value: Role; label: string; desc: string; icon: typeof User }[] = [
@@ -16,7 +17,7 @@ const roles: { value: Role; label: string; desc: string; icon: typeof User }[] =
   { value: 'student', label: 'Student', desc: 'Individual record only', icon: User },
 ]
 
-export function Header({ onMenuClick }: HeaderProps) {
+export function Header({ onMenuClick, sseNotifCount = 0 }: HeaderProps) {
   const { auth, switchRole } = useAuth()
   const navigate = useNavigate()
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -67,9 +68,9 @@ export function Header({ onMenuClick }: HeaderProps) {
           title="Task inbox"
         >
           <Bell className="w-5 h-5" />
-          {notifCount > 0 && (
+          {(notifCount + sseNotifCount) > 0 && (
             <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center w-5 h-5 text-[10px] font-bold bg-[var(--color-scarlet)] text-white rounded-full">
-              {notifCount > 9 ? '9+' : notifCount}
+              {(notifCount + sseNotifCount) > 9 ? '9+' : (notifCount + sseNotifCount)}
             </span>
           )}
         </button>

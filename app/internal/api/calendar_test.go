@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"heywood-tbs/internal/auth"
@@ -177,6 +178,99 @@ func TestMailUnreadCount(t *testing.T) {
 	// Staff mock has 1 unread message
 	if resp.Count < 0 {
 		t.Errorf("expected non-negative count, got %d", resp.Count)
+	}
+}
+
+func TestSendMailHandler(t *testing.T) {
+	h := newTestHandler(t)
+	h.calendarProvider = &calendar.MockCalendar{}
+
+	body := `{"to":["capt.jones@usmc.mil"],"subject":"Training Update","body":"Updated schedule attached."}`
+	req := httptest.NewRequest("POST", "/api/v1/mail/send", strings.NewReader(body))
+	req = withFullContext(req, auth.RoleStaff, "", "")
+	rec := httptest.NewRecorder()
+
+	h.handleSendMail(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]string
+	json.NewDecoder(rec.Body).Decode(&resp)
+	if resp["status"] != "sent" {
+		t.Errorf("expected status 'sent', got %s", resp["status"])
+	}
+}
+
+func TestSendMailHandler_Validation(t *testing.T) {
+	h := newTestHandler(t)
+	h.calendarProvider = &calendar.MockCalendar{}
+
+	body := `{"body":"hello"}`
+	req := httptest.NewRequest("POST", "/api/v1/mail/send", strings.NewReader(body))
+	req = withFullContext(req, auth.RoleStaff, "", "")
+	rec := httptest.NewRecorder()
+
+	h.handleSendMail(rec, req)
+
+	if rec.Code != 400 {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestReplyMailHandler(t *testing.T) {
+	h := newTestHandler(t)
+	h.calendarProvider = &calendar.MockCalendar{}
+
+	body := `{"body":"Roger, will comply."}`
+	req := httptest.NewRequest("POST", "/api/v1/mail/mail-1/reply", strings.NewReader(body))
+	req.SetPathValue("id", "mail-1")
+	req = withFullContext(req, auth.RoleXO, "", "")
+	rec := httptest.NewRecorder()
+
+	h.handleReplyMail(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]string
+	json.NewDecoder(rec.Body).Decode(&resp)
+	if resp["status"] != "sent" {
+		t.Errorf("expected status 'sent', got %s", resp["status"])
+	}
+}
+
+func TestRespondEventHandler(t *testing.T) {
+	h := newTestHandler(t)
+	h.calendarProvider = &calendar.MockCalendar{}
+
+	tests := []struct {
+		name     string
+		response string
+		wantCode int
+	}{
+		{"accept", "accept", 200},
+		{"decline", "decline", 200},
+		{"tentative", "tentativelyAccept", 200},
+		{"invalid", "maybe", 400},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := `{"response":"` + tt.response + `"}`
+			req := httptest.NewRequest("POST", "/api/v1/calendar/events/mock-event-1/respond", strings.NewReader(body))
+			req.SetPathValue("id", "mock-event-1")
+			req = withFullContext(req, auth.RoleStaff, "", "")
+			rec := httptest.NewRecorder()
+
+			h.handleRespondEvent(rec, req)
+
+			if rec.Code != tt.wantCode {
+				t.Errorf("expected %d, got %d: %s", tt.wantCode, rec.Code, rec.Body.String())
+			}
+		})
 	}
 }
 

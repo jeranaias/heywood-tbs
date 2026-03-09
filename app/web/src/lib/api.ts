@@ -7,6 +7,7 @@ import type {
   Instructor, TrainingEvent, Qualification, QualRecord,
   AuthInfo, ChatMessage, Task, Message, Notification,
   AppSettings, SystemInfo, CalendarEvent, MailSummary,
+  CounselingSession,
 } from './types'
 
 const STATIC = import.meta.env.MODE === 'static'
@@ -89,6 +90,39 @@ export const api = {
     return get<Student>(`/students/${id}`)
   },
 
+  updateStudent: async (id: string, updates: { notes?: string; atRisk?: boolean; riskFlags?: string[] }) => {
+    return patch<Student>(`/students/${id}`, updates)
+  },
+
+  getStudentNotes: async (id: string) => {
+    return get<{ notes: Array<{ id: string; studentId: string; authorRole: string; authorName: string; content: string; type: string; createdAt: string }> }>(`/students/${id}/notes`)
+  },
+
+  createStudentNote: async (studentId: string, content: string, type: string = 'note') => {
+    return post<{ notes: Array<{ id: string; studentId: string; authorRole: string; authorName: string; content: string; type: string; createdAt: string }> }>(`/students/${studentId}/notes`, { content, type })
+  },
+
+  // Counseling
+  getCounselings: async (params?: Record<string, string>) => {
+    return get<{ sessions: CounselingSession[]; total: number }>('/counselings', params)
+  },
+
+  getCounseling: async (id: string) => {
+    return get<CounselingSession>(`/counselings/${id}`)
+  },
+
+  createCounseling: async (session: Partial<CounselingSession>) => {
+    return post<CounselingSession>('/counselings', session)
+  },
+
+  updateCounseling: async (id: string, session: Partial<CounselingSession>) => {
+    return put<CounselingSession>(`/counselings/${id}`, session)
+  },
+
+  generateCounselingOutline: async (studentId: string, type?: string) => {
+    return post<{ outline: string }>('/counselings/generate-outline', { studentId, type })
+  },
+
   getStudentStats: async (params?: Record<string, string>) => {
     if (STATIC) {
       const sd = await getStaticModule()
@@ -156,6 +190,23 @@ export const api = {
       return sd.listSchedule(params)
     }
     return get<{ events: TrainingEvent[]; total: number }>('/schedule', params)
+  },
+
+  createTrainingEvent: async (event: Partial<TrainingEvent>) => {
+    return post<TrainingEvent>('/schedule', event)
+  },
+
+  updateTrainingEvent: async (id: string, event: Partial<TrainingEvent>) => {
+    return put<TrainingEvent>(`/schedule/${id}`, event)
+  },
+
+  deleteTrainingEvent: async (id: string) => {
+    const res = await fetch(`${API}/schedule/${id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    })
+    if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`)
+    return res.json()
   },
 
   // Chat (non-streaming)
@@ -236,6 +287,30 @@ export const api = {
     onDone()
   },
 
+  // Chat suggestions
+  getSuggestedPrompts: async () => {
+    if (STATIC) return { prompts: ['How am I doing?', 'My schedule today'] }
+    return get<{ prompts: string[] }>('/chat/suggestions')
+  },
+
+  // Chat sessions
+  getChatSessions: async () => {
+    return get<{ sessions: Array<{ id: string; title: string; userRole: string; createdAt: string; updatedAt: string }> }>('/chat/sessions')
+  },
+
+  getChatSessionMessages: async (sessionId: string) => {
+    return get<{ messages: Array<{ role: string; content: string }> }>(`/chat/sessions/${sessionId}/messages`)
+  },
+
+  deleteChatSession: async (sessionId: string) => {
+    const res = await fetch(`${API}/chat/sessions/${sessionId}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    })
+    if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`)
+    return res.json()
+  },
+
   // Auth
   getAuthMe: async () => {
     if (STATIC) {
@@ -264,6 +339,19 @@ export const api = {
 
   updateTask: async (id: string, updates: Partial<Pick<Task, 'status' | 'priority' | 'assignedTo'>>) => {
     return patch<Task>(`/tasks/${id}`, updates)
+  },
+
+  createTask: async (task: { title: string; description?: string; assignedTo?: string; priority?: string; dueDate?: string; relatedId?: string }) => {
+    return post<Task>('/tasks', task)
+  },
+
+  deleteTask: async (id: string) => {
+    const res = await fetch(`${API}/tasks/${id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    })
+    if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`)
+    return res.json()
   },
 
   // Messages
@@ -307,6 +395,18 @@ export const api = {
 
   getMailUnreadCount: async () => {
     return get<{ count: number }>('/mail/unread-count')
+  },
+
+  sendMail: async (to: string[], subject: string, body: string) => {
+    return post<{ status: string }>('/mail/send', { to, subject, body })
+  },
+
+  replyToMail: async (messageId: string, body: string) => {
+    return post<{ status: string }>(`/mail/${messageId}/reply`, { body })
+  },
+
+  respondToEvent: async (eventId: string, response: 'accept' | 'decline' | 'tentativelyAccept') => {
+    return post<{ status: string }>(`/calendar/events/${eventId}/respond`, { response })
   },
 
   // Settings (XO/Staff only)

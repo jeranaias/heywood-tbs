@@ -7,6 +7,7 @@ interface ChatContextValue {
   loading: boolean
   sendMessage: (content: string) => Promise<void>
   clearMessages: () => void
+  loadMessages: (msgs: ChatMessage[]) => void
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null)

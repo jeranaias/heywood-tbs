@@ -24,6 +24,15 @@ func (h *HybridStore) ListStudents(company, phase, search string, atRiskOnly boo
 func (h *HybridStore) GetStudent(id string) (*models.Student, bool) {
 	return h.ref.GetStudent(id)
 }
+func (h *HybridStore) UpdateStudent(id string, req models.StudentUpdateRequest) error {
+	return h.ref.UpdateStudent(id, req)
+}
+func (h *HybridStore) CreateStudentNote(note models.StudentNote) error {
+	return h.mutable.CreateStudentNote(note)
+}
+func (h *HybridStore) ListStudentNotes(studentID string) []models.StudentNote {
+	return h.mutable.ListStudentNotes(studentID)
+}
 func (h *HybridStore) StudentStats(company string) models.StudentStats {
 	return h.ref.StudentStats(company)
 }
@@ -41,6 +50,15 @@ func (h *HybridStore) QualStats() models.QualStats {
 }
 func (h *HybridStore) ListSchedule(phase string) []models.TrainingEvent {
 	return h.ref.ListSchedule(phase)
+}
+func (h *HybridStore) CreateTrainingEvent(event models.TrainingEvent) error {
+	return h.mutable.CreateTrainingEvent(event)
+}
+func (h *HybridStore) UpdateTrainingEvent(id string, event models.TrainingEvent) error {
+	return h.mutable.UpdateTrainingEvent(id, event)
+}
+func (h *HybridStore) DeleteTrainingEvent(id string) error {
+	return h.mutable.DeleteTrainingEvent(id)
 }
 func (h *HybridStore) TodaySchedule(today string) []models.TrainingEvent {
 	return h.ref.TodaySchedule(today)
@@ -70,6 +88,21 @@ func (h *HybridStore) GetExamResults(studentID string, examNum int) *models.Exam
 	return h.ref.GetExamResults(studentID, examNum)
 }
 
+// ---- Counseling: delegates to mutable store ----
+
+func (h *HybridStore) CreateCounseling(session models.CounselingSession) error {
+	return h.mutable.CreateCounseling(session)
+}
+func (h *HybridStore) ListCounselings(studentID string) []models.CounselingSession {
+	return h.mutable.ListCounselings(studentID)
+}
+func (h *HybridStore) GetCounseling(id string) (*models.CounselingSession, bool) {
+	return h.mutable.GetCounseling(id)
+}
+func (h *HybridStore) UpdateCounseling(id string, session models.CounselingSession) error {
+	return h.mutable.UpdateCounseling(id, session)
+}
+
 // ---- Mutable data: delegates to JSON store ----
 
 func (h *HybridStore) CreateTask(task models.Task) error {
@@ -83,6 +116,9 @@ func (h *HybridStore) GetTask(id string) (*models.Task, bool) {
 }
 func (h *HybridStore) UpdateTask(id string, req models.TaskUpdateRequest) error {
 	return h.mutable.UpdateTask(id, req)
+}
+func (h *HybridStore) DeleteTask(id string) error {
+	return h.mutable.DeleteTask(id)
 }
 func (h *HybridStore) CreateMessage(msg models.Message) error {
 	return h.mutable.CreateMessage(msg)

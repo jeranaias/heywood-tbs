@@ -305,3 +305,18 @@ func (m *MockCalendar) CreateEvent(event models.CalendarEvent) (models.CalendarE
 	event.Source = "outlook"
 	return event, nil
 }
+
+// SendMail is a no-op in demo mode.
+func (m *MockCalendar) SendMail(role string, to []string, subject, body string) error {
+	return nil
+}
+
+// ReplyToMail is a no-op in demo mode.
+func (m *MockCalendar) ReplyToMail(role string, messageID, body string) error {
+	return nil
+}
+
+// RespondToEvent is a no-op in demo mode.
+func (m *MockCalendar) RespondToEvent(role string, eventID, response string) error {
+	return nil
+}

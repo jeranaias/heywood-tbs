@@ -30,10 +30,12 @@ type Store struct {
 	// Exam results (immutable reference data)
 	ExamResults []models.ExamResult
 
-	// Mutable data (tasks, messages, notifications)
+	// Mutable data (tasks, messages, notifications, counseling)
 	Tasks         []models.Task
 	Messages      []models.Message
 	Notifications []models.Notification
+	StudentNotes  []models.StudentNote
+	Counselings   []models.CounselingSession
 
 	studentByID    map[string]*models.Student
 	instructorByID map[string]*models.Instructor
@@ -157,6 +159,112 @@ func (s *Store) ListStudents(company, phase, search string, atRiskOnly bool) []m
 func (s *Store) GetStudent(id string) (*models.Student, bool) {
 	st, ok := s.studentByID[id]
 	return st, ok
+}
+
+func (s *Store) UpdateStudent(id string, req models.StudentUpdateRequest) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st, ok := s.studentByID[id]
+	if !ok {
+		return fmt.Errorf("student %s not found", id)
+	}
+	if req.Notes != nil {
+		st.Notes = *req.Notes
+	}
+	if req.AtRisk != nil {
+		st.AtRisk = *req.AtRisk
+	}
+	if req.RiskFlags != nil {
+		st.RiskFlags = req.RiskFlags
+	}
+	return nil
+}
+
+func (s *Store) CreateStudentNote(note models.StudentNote) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if note.ID == "" {
+		note.ID = fmt.Sprintf("NOTE-%03d", s.nextID)
+		s.nextID++
+	}
+	if note.CreatedAt == "" {
+		note.CreatedAt = time.Now().Format(time.RFC3339)
+	}
+	s.StudentNotes = append(s.StudentNotes, note)
+	return nil
+}
+
+func (s *Store) ListStudentNotes(studentID string) []models.StudentNote {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var result []models.StudentNote
+	for _, n := range s.StudentNotes {
+		if n.StudentID == studentID {
+			result = append(result, n)
+		}
+	}
+	return result
+}
+
+// --- Counseling operations ---
+
+func (s *Store) CreateCounseling(session models.CounselingSession) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if session.ID == "" {
+		s.nextID++
+		session.ID = fmt.Sprintf("COUNS-%03d", s.nextID)
+	}
+	now := time.Now().Format(time.RFC3339)
+	if session.CreatedAt == "" {
+		session.CreatedAt = now
+	}
+	if session.UpdatedAt == "" {
+		session.UpdatedAt = now
+	}
+	if session.Status == "" {
+		session.Status = "draft"
+	}
+	s.Counselings = append(s.Counselings, session)
+	return nil
+}
+
+func (s *Store) ListCounselings(studentID string) []models.CounselingSession {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var result []models.CounselingSession
+	for _, c := range s.Counselings {
+		if studentID == "" || c.StudentID == studentID {
+			result = append(result, c)
+		}
+	}
+	return result
+}
+
+func (s *Store) GetCounseling(id string) (*models.CounselingSession, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for i := range s.Counselings {
+		if s.Counselings[i].ID == id {
+			return &s.Counselings[i], true
+		}
+	}
+	return nil, false
+}
+
+func (s *Store) UpdateCounseling(id string, session models.CounselingSession) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.Counselings {
+		if s.Counselings[i].ID == id {
+			session.ID = id
+			session.CreatedAt = s.Counselings[i].CreatedAt
+			session.UpdatedAt = time.Now().Format(time.RFC3339)
+			s.Counselings[i] = session
+			return nil
+		}
+	}
+	return fmt.Errorf("counseling session %s not found", id)
 }
 
 // StudentStats computes aggregate KPIs for students, optionally filtered by company.
@@ -284,6 +392,42 @@ func (s *Store) ListSchedule(phase string) []models.TrainingEvent {
 		}
 	}
 	return result
+}
+
+func (s *Store) CreateTrainingEvent(event models.TrainingEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if event.ID == "" {
+		s.nextID++
+		event.ID = fmt.Sprintf("EVT-%03d", s.nextID)
+	}
+	s.Schedule = append(s.Schedule, event)
+	return nil
+}
+
+func (s *Store) UpdateTrainingEvent(id string, event models.TrainingEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.Schedule {
+		if s.Schedule[i].ID == id {
+			event.ID = id
+			s.Schedule[i] = event
+			return nil
+		}
+	}
+	return fmt.Errorf("training event %s not found", id)
+}
+
+func (s *Store) DeleteTrainingEvent(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.Schedule {
+		if s.Schedule[i].ID == id {
+			s.Schedule = append(s.Schedule[:i], s.Schedule[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("training event %s not found", id)
 }
 
 // ListFeedback returns feedback, optionally filtered by event code.
@@ -452,7 +596,28 @@ func (s *Store) UpdateTask(id string, req models.TaskUpdateRequest) error {
 			if req.AssignedTo != nil {
 				s.Tasks[i].AssignedTo = *req.AssignedTo
 			}
+			if req.Title != nil {
+				s.Tasks[i].Title = *req.Title
+			}
+			if req.Description != nil {
+				s.Tasks[i].Description = *req.Description
+			}
+			if req.DueDate != nil {
+				s.Tasks[i].DueDate = *req.DueDate
+			}
 			s.Tasks[i].UpdatedAt = time.Now().Format(time.RFC3339)
+			return s.persistJSON("tasks.json", s.Tasks)
+		}
+	}
+	return fmt.Errorf("task %s not found", id)
+}
+
+func (s *Store) DeleteTask(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.Tasks {
+		if s.Tasks[i].ID == id {
+			s.Tasks = append(s.Tasks[:i], s.Tasks[i+1:]...)
 			return s.persistJSON("tasks.json", s.Tasks)
 		}
 	}
