@@ -40,7 +40,7 @@ Most "AI" tools paste your question into a chatbot and hope for the best. Heywoo
 Here's what happens when you ask *"How is 2ndLt Perez doing?"*:
 
 1. Your question goes to the Go backend's `/api/v1/chat` endpoint
-2. The backend sends it to GPT-4o along with a **system prompt** tuned to TBS (grading weights, pillar thresholds, military tone) and a **list of 12 tools** the AI is allowed to call
+2. The backend sends it to GPT-4o along with a **system prompt** tuned to TBS (grading weights, pillar thresholds, military tone) and a **list of 9 tools** the AI is allowed to call
 3. GPT-4o decides it needs student data and calls the `lookup_student` tool with `{"name": "Perez"}`
 4. The Go backend executes that function against the DataStore — the same interface that serves the dashboard
 5. Real student data (scores, trends, phase, status) returns to GPT-4o as structured JSON
@@ -54,17 +54,14 @@ The AI never sees the full database. It only sees what its tool calls return. It
 | Tool | What It Does |
 |------|-------------|
 | `lookup_student` | Find a student by name or ID, return full record |
-| `search_students` | Filter students by company, phase, status, or score range |
-| `get_at_risk` | List students flagged as at-risk with severity ranking |
-| `get_student_stats` | Aggregate statistics — averages, distributions, trends |
-| `get_schedule` | Training schedule for today, this week, or a specific date |
+| `lookup_schedule` | Training schedule for today, this week, or a specific date |
 | `lookup_calendar` | Personal + master calendar events from Outlook |
-| `get_qual_records` | Instructor qualification status and expiration dates |
-| `get_qual_stats` | Qualification coverage gaps and readiness percentages |
+| `lookup_exam_results` | Exam performance by topic area for a student |
 | `web_search` | Search for doctrine references, regulations, current info |
 | `create_task` | Turn a conversation directive into a tracked task |
 | `send_message` | Route an internal message to a role or person |
-| `create_notification` | Generate a notification for a specific role |
+| `schedule_event` | Create a calendar event from conversation |
+| `setup_guide` | Walk through initial Heywood configuration |
 
 The system prompt adapts per role. When the XO asks a question, Heywood responds as a subordinate staff officer providing a brief. When a student asks, it responds as an advisor explaining their own performance. Same AI, different persona, different data scope.
 
@@ -97,6 +94,7 @@ Web-based configuration — no CLI, no config files, no SSH. Data source selecti
 - **Training Schedule** — Full TBS schedule with event types, locations, lead instructors, graded/ungraded status. Filterable by phase and date range.
 - **My Calendar** — Personal Outlook calendar merged with the master TBS training schedule. Color-coded by source. In demo mode, generates realistic mock events.
 - **Task Inbox** — AI-generated tasks from conversation. When the XO tells Heywood *"have SSgt Diaz schedule remedial land nav for Perez,"* it creates a tracked task with priority, status, due date, and assignment.
+- **Reports** — Counseling history, performance trends, and exportable summaries with chart visualizations.
 
 ---
 
@@ -105,7 +103,7 @@ Web-based configuration — no CLI, no config files, no SSH. Data source selecti
 ```
 ┌─────────────────────────────────────────────────────┐
 │                    React SPA (Vite)                   │
-│   11 Pages · 30 Components · Tailwind CSS · Router   │
+│   12 Pages · 46 Components · Tailwind CSS · Router    │
 ├─────────────────────────────────────────────────────┤
 │               Go HTTP Server (net/http)               │
 │   35+ REST Endpoints · Middleware Chain · Streaming   │
@@ -126,7 +124,7 @@ Web-based configuration — no CLI, no config files, no SSH. Data source selecti
 
 **No ORM.** Database queries are handwritten SQL in the store implementations. ORMs add complexity, hide performance problems, and make FIPS auditing harder. The DataStore interface provides the same abstraction an ORM would, but the implementation is visible and auditable.
 
-**Interface-driven design.** The `DataStore` interface (46 lines, 27 methods) is the backbone of the application. Every handler, every AI tool, every API endpoint talks to this interface — never to a specific backend. Swapping from JSON files to PostgreSQL is a configuration change, not a code change.
+**Interface-driven design.** The `DataStore` interface (44 methods) is the backbone of the application. Every handler, every AI tool, every API endpoint talks to this interface — never to a specific backend. Swapping from JSON files to PostgreSQL is a configuration change, not a code change.
 
 **Single binary deployment.** `go build` produces one statically-linked binary. The React SPA is built at Docker image time and served by the Go server as embedded static files. No nginx, no reverse proxy, no runtime dependencies except the binary itself.
 
@@ -134,7 +132,7 @@ Web-based configuration — no CLI, no config files, no SSH. Data source selecti
 
 | Layer | Technology | Why |
 |-------|-----------|-----|
-| **Frontend** | React 18, TypeScript, Tailwind CSS, Vite | Type safety, utility-first CSS, fast builds |
+| **Frontend** | React 19, TypeScript, Tailwind CSS, Vite | Type safety, utility-first CSS, fast builds |
 | **Backend** | Go 1.24, stdlib `net/http` | Single binary, FIPS 140-3 native, zero CGO |
 | **AI** | OpenAI GPT-4o / Azure OpenAI | Tool use support, best reasoning for data analysis |
 | **Database** | JSON / SQLite / PostgreSQL | Start simple, scale when needed |
@@ -235,7 +233,7 @@ heywood-tbs/
 │   │   ├── ai/                     # AI chat service, system prompts, tool definitions
 │   │   │   ├── chat.go             #   OpenAI/Azure OpenAI client with tool use loop
 │   │   │   ├── prompts.go          #   Role-adaptive system prompts (XO, Staff, SPC, Student)
-│   │   │   ├── tools.go            #   12 tool definitions in OpenAI function-calling format
+│   │   │   ├── tools.go            #   9 tool definitions in OpenAI function-calling format
 │   │   │   └── weather.go, news.go #   Live data services (weather, news, traffic)
 │   │   ├── api/                    # HTTP handlers — one file per domain
 │   │   │   ├── router.go           #   35+ routes registered on stdlib ServeMux
@@ -253,7 +251,7 @@ heywood-tbs/
 │   │   │   ├── outlook.go          #   Real Outlook via Graph API
 │   │   │   └── mock.go             #   Demo mode with generated events
 │   │   ├── data/                   # DataStore implementations
-│   │   │   ├── iface.go            #   27-method DataStore interface
+│   │   │   ├── iface.go            #   44-method DataStore interface
 │   │   │   ├── store.go            #   JSON file store (demo/dev)
 │   │   │   ├── sql_store.go        #   SQLite + PostgreSQL
 │   │   │   ├── excel_store.go      #   Excel .xlsx import
@@ -269,7 +267,7 @@ heywood-tbs/
 │   │       └── teams.go            #   Teams, channels, shared files
 │   ├── web/                        # React SPA
 │   │   └── src/
-│   │       ├── pages/              #   11 page components
+│   │       ├── pages/              #   12 page components
 │   │       ├── components/         #   Reusable UI (sidebar, header, chat, roster)
 │   │       ├── hooks/              #   useAuth, useChat, ChatContext
 │   │       └── lib/                #   API client, types, utilities
@@ -280,7 +278,7 @@ heywood-tbs/
 └── docs/                           # Briefing materials, build plans
 ```
 
-**41 Go source files** across 8 packages. **30 TypeScript/React files** across pages, components, hooks, and utilities.
+**56 Go source files** across 9 packages. **46 TypeScript/React files** across pages, components, hooks, and utilities.
 
 ---
 
@@ -331,7 +329,8 @@ Final image is ~30MB. Contains zero development tools, zero package managers, ze
 | `GRAPH_CLIENT_SECRET` | For M365 | App registration client secret |
 | `GRAPH_CLOUD` | No | `commercial` (default) / `gcc-high` / `dod` |
 | `GRAPH_MASTER_CALENDAR_ID` | No | Shared calendar ID for TBS-wide events |
-| `SEARXNG_URL` | No | SearXNG instance URL for web search tool |
+| `PORT` | No | Server port (default `8080`) |
+| `DATA_DIR` | No | Path to data directory (default `data`) |
 
 The backend auto-detects which AI provider to use: if `AZURE_OPENAI_ENDPOINT` is set, it uses Azure OpenAI; if `OPENAI_API_KEY` is set, it uses OpenAI directly; if neither is set, Heywood falls back to mock responses so the rest of the application still works.
 
@@ -339,11 +338,11 @@ The backend auto-detects which AI provider to use: if `AZURE_OPENAI_ENDPOINT` is
 
 ## By the Numbers
 
-- **~8,800 lines Go** across 41 files in 8 packages
-- **~4,400 lines TypeScript/React** across 30 files and 11 pages
+- **~15,900 lines Go** across 56 files in 9 packages
+- **~6,500 lines TypeScript/React** across 46 files and 12 pages
 - **35+ REST API endpoints** serving JSON
-- **27-method DataStore interface** with 5 backend implementations
-- **12 AI tools** for grounded, data-driven conversational access
+- **44-method DataStore interface** with 5 backend implementations
+- **9 AI tools** for grounded, data-driven conversational access
 - **4 Microsoft Graph integrations** (Calendar, Mail, SharePoint, Teams)
 - **3 national cloud endpoints** (Commercial, GCC High, DoD)
 - **2 auth modes** (Demo role picker + CAC/PKI via X.509)
